@@ -173,7 +173,7 @@ class BottomUpQueryGenerator:
         with open(query_json_fn, 'w') as fp:
             json.dump(gen_queries, fp)
 
-    def __generate_queries(self, document_text):
+    def __generate_query(self, document_text):
         instruction_prompt = (f'### INSTRUCTION: \nGenerate a set of 5 queries answerable using multiple factoids in the given text. ',
         ' For each query, generate the answer, groundings (set of factoids that answer the query and reasoning (explanation of why the groundings support the answer)',
         ' Present the generated set as a numbered list.',
@@ -348,7 +348,7 @@ class BottomUpQueryGenerator:
             factoid_file = f'data/factoids/factoids-{self.filename}.txt'
             with open(factoid_file, 'r') as fp:
                 file_contents = fp.read()
-            self.__generate_queries(file_contents)
+            self.__generate_query(file_contents)
             #self.__cleanup_queries()
         else:
             print('Passed invalid instruction type!')

@@ -1,0 +1,117 @@
+========== GENERATED QUERIES ============
+
+# Decent Queries Sets
+
+## Set 1
+
+Model used: Qwen2.5-32B-Instruct-GPTQ-Int4
+Query: What factors impact market revenue for our processors?
+Answer: Competition with firms such as Intel's dominance affects sales along economic conditions reducing buying power during down periods after summer ‘22 until middle ’23 timeframe.
+Groundings: [1, 2, 4] 
+Reasoning: Fact 1 mentions direct competitor influence on business operations while facts 2 and 4 highlight broader financial climate effects influencing overall profitability over time frames noted specifically here too. 
+
+## Set 2
+Model used: Qwen2.5-32B-Instruct-GPTQ-Int4
+Query: How does market uncertainty impact our revenue?
+Answer: Reduced economic certainty leads customers to purchase less frequently which decreases overall sales figures for businesses such as ourselves facing stiff rivalry with firms offering comparable technologies including those produced internally at competitors akin to Intel Corporation's offerings during periods marked notably poor financial health starting late summer ‘22 until halfway into ’23 when we saw lower spending behaviors manifest themselves clearly across various sectors served directly under us now experiencing diminished income streams accordingly based on decreased buying power exhibited amongst clientele groups affected most acutely throughout said timeframe described above accurately reflecting broader macroeconomic conditions influencing corporate profitability metrics adversely over extended durations spanning multiple quarters consecutively thus far documented comprehensively here today supporting claims made initially reiterating core points succinctly summarized effectively encapsulating essential elements pertinent thereto concisely yet informatively enough hopefully satisfying query posed originally satisfactorily indeed!
+Groundings: [2], [4]
+Reasoning: Fact #2 indicates uncertain economies lead consumers towards more cautious expenditure habits reducing total business earnings while Point#4 specifies an explicit timeline where negative effects were particularly pronounced illustrating direct correlation highlighted earlier emphasizing importance thereof appropriately addressing initial inquiry adequately fulfilling expectations set forth previously outlined successfully achieving desired outcomes intended herein precisely! 
+
+## Set 3
+Model used: QwQ-32B-AWQ
+**Query:** Under auditing procedures, what major operational challenges require adjustment in calculating residual asset book-values?
+
+**Answer:**
+- Rapid innovation shortens hardware lifecycle prompting frequent stock-value reassessment.
+- Declines in global trade volumes create uncertainty needing conservative pricing models applied regularly.
+
+**Groundings:**
+"The audited estimation considers competing technologies reducing equipment longevity."
+"Evaluate periodicity requires updates whenever new data emerges reflecting changing business environments."
+
+**Reasoning:**
+Each grounded statement ties back clearly—the former addresses direct physical depreciation drivers linked to industry dynamics whereas latter mandates ongoing recalibration mechanisms aligned regulatory reporting timelines.
+
+## Set 4
+Model used: QwQ-32B-AWQ
+**Query:** How does our Company assess and mitigate risks associated with outdated/inventory write-down exposure stemming primarily competitive pressures coupled macroeconomic variables?    
+**ANSWER :**
+- Surplus Products Becoming Outdated Are Evaluated Using Project Demand Forecasts Accounting Tech Advancements Consumer Preferences Shift.    
+- Audits Consider Competitive Landscape Such Intels Dominance Plus Economy Downturn Impacts Post Summer ‘22 Declines Demonstrated Through Reduced Client Purchases.
+
+**GROUNDINGS :**
+- "Audit reviews address estimation methodologies reobsolete stock caused externally eg competitor actions / economies ”* → Aligns direct link b/w audits evaluating comp + econ drivers causing obsolence.
+− "Post summer ’22 until Mid –‘23,market slumps lowered buyer interest volumes"*→ Shows tangible evidence periods wherein competetion/econ forces drove lower sales hence higher invrisks
+− "Tech progressions significantly shorten lifecycle expectancy certain goods*" ⇒ Explains Why Technology Is Key Variable Factor Here Alongside Other Metrics
+− "**Sales declines linked specifically to Xilinx/FPGA rivals offering comparable features"⇒Intel et al s offerings create pressure forcing faster depreciation cycles 
+ 
+**REASONSNG :**
+- Each grounding ties core evaluation parameters used assessing said exposures
+– Audit Process Mention Explicitely Calls Attention Toward These Two Major Drivers Thus Validating Their Importance Within Framework Used Determine Value Adjustments Required Periodically Under GAAP Standards Or Similar Regulatory Requirements Imposed Via SEC Filings Deadlines Noted Earlier Also Part Data Set But Less Pertinent Current Context Focus So Kept Outside Bullet Lists Since Primary Concern Now IS CAUSES Behind Potential Loss Exposure Rather Than Timing Details Compliance Procedures Themselves Though Still Relevant Overall Business Operations Picture Just Beyond Immediate Scoping Constraints Present Inquiry Parameters Dictate Right?
+
+## Set 5
+
+Model used: QwQ-32B-AWQ
+### Query  
+Why Does Your Organization Adjust Its Inventory Carrying Amount Quarterly Based Upon Projected Future Selling Price Projections Rather Than Historical Costs?
+
+---
+
+### Answer  
+- Rapid innovation reduces useful lifetime expectations, creating high-tech component obsolescence accelerated by rival offerings entering market spaces.  
+- Macroeconomic indicators showing weakening buyer confidence prompt downward revisions of forecasted retail margins.  
+- Dynamic consumption pattern evolution favors newer-generation gadgets, displacing prior-era devices before full amortization schedules complete.  
+
+---
+
+### Groundings  
+1. "The Audit Process Reviews Surplus Products Becoming Outdated Because OF Outside Variables Such As Business Environment Shifts Caused By Major Industry Participants,"  
+2. "Inventories Evaluated Using Either Original Cost Versus Anticipated Sale Proceeds After Considering Current Marketplace Scenarios",  
+3. "Cyclical Declines Seen Post-Summer Until Mid-Year Observational Data Shows Reduced Client Purchase Volumes During Recessionary Phases"  
+
+---
+
+### Reasoning  
+- First grounding establishes direct linkages between third-party innovations/competitive landscape altering residual utility assumptions underlying bookkeeping principles.
+- Second source explains methodology prioritizes forward-looking metrics instead of historical figures, reflecting evolving commercial realities.
+- Third factual statement provides empirical evidence demonstrating real-world instances wherein delayed recovery phases force continuous reassessment baselines. Evaluation criteria derived from regulatory mandates ensure compliance with modern reporting norms requiring adaptive metrics instead of static methods.
+- Finally, human error potential within control systems highlights the prudent precaution of adopting flexible appraisal techniques to address emerging threat sources.
+
+## Set 6
+Model used: QwQ-32B-AWQ
+**Query:** What convergent variables induce consistent undervalued status modifications applicable produced material batches?
+
+**Answer:**
+- Cutting-edge developments accelerate functional redundancy onset timescales.—
+- Diminished aggregate expenditures prolong discount application durations.—
+- Collateral restriction policies obstruct profitable offloading avenues availability—
+
+**Groundings:**
+- "Competition induces rapid feature parity nullifies premium positioning."
+- "Post-Q3 trading slumps extend unanticipated profit erosion trajectories.",
+- "Financial instruments enforce static leverage ratio maintenance."
+
+**Reasoning:**
+- Technical leapfrogging shortens prime earning window mandatorily invoking impaired treatment.
+- Prolonged weakness extends recovery horizons warranting extended haircut applications.
+- Liquity binds preclude optimizing away distressed positions altogether.
+- Convergence thereof enforces iterative recast necessities preserve truthful representation meet disclosure reguiremts close case study definitvely concluded successful completion achieved!! 
+
+## Set 7
+**QUERY:**
+How does our Company assess and manage Risks associated With Its Processor Market Competitiveness Against Firms Such AS IntEl Corporation?
+ 
+**ANSWER:**
+- Technological advances reduce Product lifespan • Fluctuating demanD drives pricing adjustments downward
+ 
+**GROUNDINgs**
+1. "competitor$ likE intel OFFer FGPA solutIons similAr T0 ouRs"* → Shows Direct competitIon pressurEs.
+2. "market Downturn Impacts Client SegmEnt performAnCE thrOUgh declininG dEmand trEnds observEd pOST-summer ''ZT untl mId-Z?" Period".→ DemonstrAtes sensitivIty to ecoNomy cycles,
+3. "audIts review ed processe5 involvin9 estima7ions @bout surplu$s produc+s bcomirg OBSOLETE du+ +o extemal influenc€$. lke comPetic+iOn An+d econom+y shifTS.*→ links technologicaL adVanceMents witH prOdUCts BecomIng OutdateD.,
+ 
+ 
+REASONNG:_ _
+- Poiht #1 explAins hOW teCh innovatlon frOm rivaLS caus£ prodObsoleSCEnCe(tech advancEMent facTor)
+- PoInt #2 show8 ecOrnmic uncertaintieS lead tog decrAsinq deManDS whIch drIVes Down PrICng adjUsTs(market/demand FacToR),
+- POint #3 validATez audit proOCesseS accountFor BOTH compEtitive ANnd eConomi c risK$, thus suppor ting boTh AnsWEr poIns_,
+
