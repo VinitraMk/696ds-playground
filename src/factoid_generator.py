@@ -40,7 +40,6 @@ HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggin
 os.environ['HF_HOME'] = HF_CACHE_DIR
 
 RELEVANCE_THRESHOLD = 2.0
-MAX_FACTOIDS_TO_SAMPLE = 75
 
 class FactoidGen:
 
@@ -58,9 +57,10 @@ class FactoidGen:
 
         if self.model_name.startswith("Qwen"):
             self.llm = LLM(model=f"./models/{self.model_name}",
-                #quantization = "gptq",
+                quantization = "gptq_marlin",
                 download_dir = HF_CACHE_DIR,
-                max_model_len = 8192,
+                max_model_len = 4096,
+                gpu_memory_utilization = 0.9,
                 tensor_parallel_size=torch.cuda.device_count())
             self.model_folder = "qwq"
         else:
@@ -162,30 +162,36 @@ class FactoidGen:
         
         return True
 
-    def __extract_factoid_list(self, text):
-        try:
-            json_match = re.search(r'\{[\s\S]*"factoids"\s*:\s*\[[\s\S]*?\]\s*\}', text)
-            if not json_match:
-                print("Warning: Could not locate valid JSON with 'factoids'.")
-                print(f"Output: {text}")
-                return []
+    def __extract_json_array_by_key(self, raw_text, target_key):
+        pattern = r'"factoids"\s*:\s*\[(?:\s*"[^"]*"\s*,?\s*)+\]'
 
-            json_str = json_match.group(0)
-            data = json.loads(json_str)
-            return data.get("factoids", [])
-        except Exception as e:
-            print(f"Error while extracting factoids: {e}")
-            print(f"Output: {text}")
-            return []
+        match = re.search(pattern, raw_text, re.DOTALL)
+        if match:
+            json_fragment = '{' + match.group(0) + '}'
+            try:
+                data = json.loads(json_fragment)
+                return data["factoids"]
+            except json.JSONDecodeError as e:
+                print(f"JSON decode error: {e}")
+                return []
+        return []
+        
 
     def __extract_and_clean_factoids(self, text, add_newline=False):
-        factoid_list = self.__extract_factoid_list(text)
-        
+        '''
+        factoids_obj = self.__extract_json_array_by_key(text, "factoids")
+        clean_factoids = []
+        if factoids_obj != None and len(factoids_obj["factoids"]) > 0:
+            clean_factoids = [s for s in factoids_obj["factoids"] if self.__is_valid_sentence(s)]
+        return clean_factoids
+        '''
+        factoid_list = self.__extract_json_array_by_key(text, "factoids")
+        #print('factoid list', factoid_list)
         clean_factoids = [s for s in factoid_list if self.__is_valid_sentence(s)]
         return clean_factoids
 
     def __generate_factoids(self, chunk_data):
-        instruction_prompt = f"""
+        instruction_prompt = """
         ### Task:
         Given a text, extract verifiable factoids from it. A factoid is a **factual statement** derived directly from the text.
 
@@ -237,6 +243,7 @@ class FactoidGen:
         - If you can't find any factoids, return an empty list presented like this "factoids: []".
 
         ### Input Format:
+        - Topic: <topic>
         - Text: <text>
 
         ### Output Format (JSON):
@@ -277,10 +284,8 @@ class FactoidGen:
     def generate_factoids(self):
         st = time()
 
-        log_fp = f'logs/bu-factoid-logs.txt'
-        log_file = open(log_fp, 'w')
-        old_stdout = sys.stdout
-        sys.stdout = log_file
+        
+
 
         chunk_fn = f'{self.filename}_chunked'
         chunk_fp = f'data/chunked_data/{chunk_fn}.json'
@@ -344,11 +349,16 @@ class FactoidGen:
             fp = open(file_chunkstore_fp, 'x')
             json.dump(chunks_obj, fp)
         print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
-        sys.stdout = old_stdout
-        log_file.close()
+
+        
 
 
 if __name__ == "__main__":
+    log_fp = f'logs/bu-factoid-logs.txt'
+    log_file = open(log_fp, 'w')
+    old_stdout = sys.stdout
+    sys.stdout = log_file
+
     multiprocessing.set_start_method("spawn")  # Fixes CUDA issue with multiprocessing
     torch.cuda.init()
 
@@ -360,6 +370,19 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     #filename = '10-K_NVDA_20240128'
+    print('topic index in args', args.topic_index, type(args.topic_index))
 
-    factoid_gen = FactoidGen(filename = args.filename, model_index = args.model_index, topic_index = args.topic_index)
-    factoid_gen.generate_factoids()
+    if args.topic_index == -1:
+        for ti in range(len(SEED_METADATA_TOPICS)):
+            print(f'Generating factoids based on topic: {SEED_METADATA_TOPICS[ti]}')
+            factoid_gen = FactoidGen(filename = args.filename, model_index = args.model_index, topic_index = ti)
+            factoid_gen.generate_factoids()
+            print(f'\n\nFinished generating factoids based on topic: {SEED_METADATA_TOPICS[ti]}')
+    else:
+        print(f'Generating factoids based on topic: {SEED_METADATA_TOPICS[args.topic_index]}')
+        factoid_gen = FactoidGen(filename = args.filename, model_index = args.model_index, topic_index = args.topic_index)
+        factoid_gen.generate_factoids()
+        print(f'\n\nFinished generating factoids based on topic: {SEED_METADATA_TOPICS[args.topic_index]}')
+
+    sys.stdout = old_stdout
+    log_file.close()

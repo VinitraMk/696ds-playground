@@ -62,7 +62,7 @@ class QueryGenerator:
                 tensor_parallel_size=torch.cuda.device_count())
         self.model_folder = "qwq"
 
-    def __extract_json_from_text(self, raw_text, target_key):
+    def __extract_json_text_by_key(self, raw_text, target_key):
         """
         Searches raw text for a JSON object that contains a specific key
         and returns it as a Python dictionary. Returns None if not found.
@@ -74,6 +74,26 @@ class QueryGenerator:
         if match:
             try:
                 return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                return None
+        return None
+    
+    def __extract_json_array_by_key(self, raw_text, target_key):
+        """
+        Extracts a list of strings from a JSON-like structure in LLM output
+        where the given key maps to a string array.
+
+        Returns a list of strings, or None if not found or not valid.
+        """
+        # Regex to find: "key": [ "value1", "value2", ... ]
+        pattern = rf'"{re.escape(target_key)}"\s*:\s*\[(?:\s*"[^"]*"\s*,?\s*)+\]'
+
+        match = re.search(pattern, raw_text, re.DOTALL)
+        if match:
+            json_fragment = "{" + match.group(0) + "}"
+            try:
+                parsed = json.loads(json_fragment)
+                return parsed[target_key]
             except json.JSONDecodeError:
                 return None
         return None
@@ -160,172 +180,252 @@ class QueryGenerator:
             return response_text, messages
         return response_text
     
-    def __cleanup_query(self, text, keys):
-        # Use regex to extract the JSON block
-        match = re.search(r'\{[\s\S]*?\}', text)
-        if not match:
-            print("No JSON object found in the input.")
-            return {}
-
-        json_str = match.group(0)
-
-        try:
-            # Attempt to parse the JSON string
-            data = json.loads(json_str)
-        except json.JSONDecodeError as e:
-            print("JSON parsing failed: " + str(e))
-            return {}
-
-        # Safely extract the required fields
-        kv0 = data.get(keys[0], "")
-        kv1 = data.get(keys[1], "")
-        return {keys[0]: kv0, keys[1]: kv1}
-
-    def __extract_clean_queryset(self, gen_query_response):
-        instruction_prompt = """
+    def __cleanup_sentence(self, sentence):
+        cleanup_instruction = """
         ### Task:
-        Extract and format the following sections from the provided text into a **strict Markdown structure**:
+        Given a sentence, riddled with grammatical, punctuation, insensible/gibberish words or typos (missing spaces), remove
+        the errors and return a clean, grammatically correct and meaningful sentence if it exists. If such a sentence doesn't exist,
+        return a blank string "".
 
-        ### Required Sections:  
-        - **Query**: The question posed (beginning with "Query:").  
-
-        ### Generation guidelines
-        - Output **only** the desired markdown structure, no explanations.
-
-        ### Formatting Rules:  
-        - Clean all text, remove extra spaces, unnecessary or incorrect punctuations.
-        - Remove trailing spaces, commas, hyphens.
-        - Fix all obvious typos
-        - Correct grammatical errors.
-
-        ### Input Format:
-        **Query:** <query text>
-
-        ### Output Format:
-        {
-            "query": <query text>,
-        }
-
-        ### Example Input:  
-        **Query:** Why adjust_[inventory values=_ quarterly?  
-
-        ### Example Output: 
-        {
-            "query": "Why adjust inventory values quarterly?",
-        } 
-
-        ### Task Input
-        """
-
-        instruction_prompt = instruction_prompt + f"\n**Text:** {gen_query_response}"
-        summary = self.__execute_LLM_task(instruction_prompt, max_new_tokens=3000, temperature=0.1, top_p = 0.9)
-        print('\nGenerated structured Query:\n', summary)
-        query_dict = self.__extract_json_from_text(summary)
-        print('query dict', query_dict)
-        '''
-        if query_dict != {}:
-            print('Query dict', query_dict)
-            with open(f'./data/queries/{self.model_folder}/{self.filename}_gen_queries.json', 'r') as fp:
-                queries = json.load(fp)
-            topic_queries = [tq for tq in queries["queries"] if tq["topic"] == SEED_METADATA_TOPICS[self.topic_index]]
-            print("topic queries", topic_queries, len(topic_queries), query_dict)
-            if len(topic_queries) > 0:
-                topic_queries = topic_queries[0]
-                topic_queries["query_sets"].append(query_dict)
-                for tq in queries["queries"]:
-                    if tq["topic"] == SEED_METADATA_TOPICS[self.topic_index]:
-                        tq["query_sets"] = topic_queries
-            else:
-                topic_queries = { "topic": SEED_METADATA_TOPICS[self.topic_index], "query_sets": [] }
-                topic_queries["query_sets"].append(query_dict)
-                queries["queries"].append(topic_queries)
-
-            with open(f'./data/queries/{self.model_folder}/{self.filename}_gen_queries.json', 'w') as fp:
-                json.dump(queries, fp)
-        '''
-
-    def __generate_answer(self, fact_doc_text, metadata, query):
-
-        instruction_prompt = """
-        Analyze the provided set of factoids, the metadata and the query give answera to the question from the provided factoids.
-
-        ### Desired response structure:  
-        - **Answer**: Write a concise answer to the question using the provided factoids.
-
-        ### Generation Rules
-        - **Do not use chinese characters** in your response.
-        - Phrase your response as concisely as possible.
-        - Keep the answer under 300 tokens.
-        - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response for either question or the answer.
-        - End the response with `###EOF###`.  
-        - Use the example structure to return the final response.
-        - Label your chain-of-thought as `###COT###` and the final answer as `###FINALRESPONSE###`.
-        - **Do not copy example from the prompt** in your response.
+        ### Cleanup Rules:
+        - Remove punctuation mistakes such as missing spaces, incorrectly placed hyphens, obvious typos, etc.
+        - Return a grammatically correct and meaningful sentence. If it doesn't exist, return "".
+        - If the sentence contains gibberish, insensible words return "".
+        - **Do not** make a completely new sentence.
+        - **Do not** hallucinate completely new words in the sentence.
+        - **Do not** put chinese words in the sentence.
 
         ### Input format:
-        **Metadata:** <meta data of the main company upon which the factoids are based.>
-        **Factoids:** [\<list of factoids\>]
-        **Query:** <query text>
+        Text: <text>
 
         ### Output format:
-        **Answer:** <answer to the query in input>
+        Cleaned Text: <cleaned up sentence>
+
+        ### Example Input:
+        Text: "USSGovernmentIntroducedLicensingRequirementsImpactingeExportsToChinHongKonMaouanRussiaIncludingAIICAndHIIntegratedCircuDuringThThirdQuarterOfFiscYearII"
 
         ### Example Output:
+        Cleaned Text: "US Government introduced licensing requirements impacting exports to China, Hong Kong, Macau, and Russia, including AI IC and HI integrated circuits during the third quarter of Fiscal Year II."
 
-        ###FINAL RESPONSE###
-        **Answer:**
-        Apple’s environmental initiatives have a significant impact on its cost structure, supplier relationships, and long-term profitability. Upfront costs have risen due to investments in renewable energy, low-carbon manufacturing, and sustainable materials. However, the shift to clean energy and more energy-efficient processes may reduce operational costs over time. Additionally, integrating recycled and sustainable materials into product development increases design complexity and processing requirements, thereby raising costs.
-        On the supply side, Apple mandates carbon reduction compliance from its suppliers, leading to higher compliance costs for those partners. Some suppliers may struggle to meet ESG standards, which could cause supply chain disruptions and increase component expenses. Nonetheless, Apple is strengthening its relationships with sustainable suppliers, gaining long-term cost advantages and fostering innovation.
-        From a profitability perspective, Apple benefits from an enhanced brand reputation, which appeals to environmentally conscious consumers and supports premium pricing. Early adoption of ESG practices also mitigates future risks associated with carbon taxes and tighter environmental regulations. Although short-term profitability may be affected by increased expenses, the long-term financial gains are expected to outweigh these initial investments.
+        ### Example Input:
+        Text: To create an intricate inquiry leveraging several provided facts about Nvidia (NVDA), I focused primarily around how regulatory constraints tied directly back toward broader corporate vulnerabilities stemming partly out environment-centric policies/risks; especially those involving governmental oversight concerning international trade alongside internal pressures arising because excessive resource usage patterns may provoke additional scrutiny/litigation threats down road if mishandles appropriately enough moving forward strategically speaking wise-wise mannerism approachable way feasible indeed possible certainly achievable realistically attainably feasibly plausible logically reasonable sensically rationally understandably comprehensibly coherently consistently maintainingly sustainabily durablly persistantly continuously perpetually enduringlty lastling
+
+        ### Example Output:
+        Cleaned Text: ""
 
         ### Input for your task:
         """
+
+        cleanup_instruction = cleanup_instruction + f"\nText: \"{sentence}\""
+        summary = self.__execute_LLM_task(prompt=cleanup_instruction, max_new_tokens=2000, temperature=0.1, top_p=0.9)
+        print('generated clean up response', summary)
+        match = re.search(r'Cleaned\s+Text:\s*"([^"]+)"', summary)
+        return match.group(1) and self.__is_valid_sentence(match.group(1)) if match else ""
+    
+    def __clean_json_array(self, json_arr):
+        cleaned_json_arr = []
+        if json_arr != None:
+            for st in json_arr:
+                if self.__is_valid_sentence(st):
+                    cleaned_json_arr.append(st)
+                else:
+                    cleaned_sentence = self.__cleanup_sentence(st)
+                    if cleaned_sentence != "":
+                        cleaned_json_arr.append(cleaned_sentence)
+        return cleaned_json_arr
 
     def __generate_grounding_reasoning_pair(self, fact_doc_text, metadata, qna_dict):
         grounding_instruction_prompt = """
         ### Task:
-        Analyze the provided set of factoids, the metadata, question & answer pair and generate groundings for the question and answer pair.
-        Groundings are factoids that support the answer to the question.
+        Analyze the provided question and answer pair, set of factoids and the metadata about the facts, generate groundings for the question and answer pair.
+        Groundings are factoids that support the answer to the question. The factoids don't have to directly support the answer but should help indirectly answering the
+        provided question.
 
         ### Generation Rules
+        - The groundings should be factoids picked directly from the provided factoids in the input prompt.
+        - **Do not** generate new factoids to put in the groundings to support the answer.
+        - Use the example structure as reference to return the final response.
+        - Return clean groundings with no typos, grammatical mistakes or erronuous punctuations.
         - **Do not use chinese characters** in your response.
         - Phrase your response as concisely as possible.
         - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response for either question or the answer.
-        - End the response with `###EOF###`.  
-        - Use the example structure to return the final response.
         - **Do not copy example from the prompt** in your response.
-        - The groundings should a list of factoids that are picked directly from the input factoids. **Do not** generate new factoids to support the answer.
+        - **Don't think** for more than 4000 tokens
 
         ### Input format:
-        **Metadata:** <meta data of the main company upon which the factoids are based.>
-        **Factoids:** [\<list of factoids\>]
-        **Question:** <question text>
-        **Answer:** <answer text>
+        Question: <question text>
+        Answer: <answer text>
+        Metadata: <meta data of the main company upon which the factoids are based.>
+        Factoids: [\<list of factoids\>]
 
         ### Output format:
-        Groundings: [\<list of factoids picked supporting the answer\>]
+        "groundings": [\<list of factoids picked supporting the answer\>]
+
+        ### Example Input:
+        Question: How does Apple’s commitment to achieving carbon neutrality across its supply chain and products by 2030, as discussed in its 10-K, affect its cost structure, supplier relationships, and long-term profitability, and what are the potential risks and rewards associated with this aggressive ESG strategy?
+        Answer: Apple’s environmental initiatives have a significant impact on its cost structure, supplier relationships, and long-term profitability. Upfront costs have risen due to investments in renewable energy, low-carbon manufacturing, and sustainable materials. However, the shift to clean energy and more energy-efficient processes may reduce operational costs over time. Additionally, integrating recycled and sustainable materials into product development increases design complexity and processing requirements, thereby raising costs.
+        Metdata: Company: Apple | SEC-filing: 10-K | Related Topic: Risk Factors and Challenges
+        Factoids: [
+            "Apple has committed to achieving carbon neutrality across its entire business, including the supply chain and product life cycle, by 2030.",
+            "The company has made significant investments in renewable energy and low-carbon manufacturing technologies.",
+            "Apple requires its suppliers to adhere to strict environmental standards, including reducing carbon emissions and using renewable electricity.",
+            "Apple’s Supplier Clean Energy Program has contributed to its goal of reducing emissions across the supply chain.",
+            "The company reports that its use of recycled and sustainable materials in products is increasing year-over-year.",
+            "Apple continues to invest in energy-efficient technologies that improve operational efficiency across its facilities.",
+            "The company discusses potential risks in its 10-K filings related to environmental regulation and climate change, including potential costs from future carbon taxes.",
+            "Apple acknowledges short-term cost increases related to sustainability efforts but positions them as long-term strategic investments.",
+            "The company’s ESG initiatives are framed as important for protecting brand value and aligning with consumer expectations.",
+            "Environmental sustainability is identified as a strategic area for long-term growth and innovation in Apple’s regulatory and investor communications.",
+            "Apple’s financial risk disclosures related to foreign exchange fluctuations in emerging markets.",
+            "Details on litigation or legal contingencies unrelated to environmental policies.",
+            "Statements about Apple’s R&D expenditures for chip architecture and performance optimization.",
+            "Inventory management practices tied to consumer demand and holiday cycles.",
+            "Tax strategies related to international operations and intellectual property.",
+            "Descriptions of supply chain risks unrelated to ESG, such as natural disasters or geopolitical tension.",
+            "Information about share repurchase programs or dividend policies.",
+            "Macroeconomic risks including inflation or interest rate sensitivity."
+        ]
 
         ### Example Output (JSON):
-        Groundings: {
-            "groundings": [
-                "Apple has committed to achieving carbon neutrality across its entire business, including supply chain and product life cycle, by 2030.",
-                "Apple invests in renewable energy and low-carbon manufacturing processes as part of its environmental sustainability goals.",
-                "The company requires its suppliers to comply with its environmental standards, including carbon reduction initiatives.",
-                "Apple works with suppliers to transition to clean energy and energy-efficient production methods.",
-                "The company integrates recycled and sustainable materials into product design and manufacturing.",
-                "Apple acknowledges that its environmental initiatives may lead to higher costs in the short term due to increased material and compliance expenses.",
-                "The company anticipates that its ESG efforts will improve brand reputation and customer loyalty.",
-                "Apple views its leadership in ESG initiatives as a competitive advantage, positioning it to mitigate future regulatory and environmental risks."
-            ]
+        "groundings": [
+            "Apple has committed to achieving carbon neutrality across its entire business, including supply chain and product life cycle, by 2030.",
+            "Apple invests in renewable energy and low-carbon manufacturing processes as part of its environmental sustainability goals.",
+            "The company requires its suppliers to comply with its environmental standards, including carbon reduction initiatives.",
+            "Apple works with suppliers to transition to clean energy and energy-efficient production methods.",
+            "The company integrates recycled and sustainable materials into product design and manufacturing.",
+            "Apple acknowledges that its environmental initiatives may lead to higher costs in the short term due to increased material and compliance expenses.",
+            "The company anticipates that its ESG efforts will improve brand reputation and customer loyalty.",
+            "Apple views its leadership in ESG initiatives as a competitive advantage, positioning it to mitigate future regulatory and environmental risks."
+        ]
+        
+        ### Input for your task:
+        """
+
+        reasoning_instruction_prompt = """
+        ### Task:
+        Analyze the provided question and answer pair, set of groundings that support the answer and the metadata about the groundings, generate reasoning for each of the groundings.
+        Reasoning is explanation of how or why the grounding sentence supports the answer to the question.
+
+        ### Generation Rules
+        - The every reasoning should be concise and kept under 50 words.
+        - Use the example structure as reference to return the final response.
+        - Return clean reasonings with no typos, grammatical mistakes or erronuous punctuations.
+        - **Do not use chinese characters** in your response.
+        - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response for either question or the answer.
+        - **Do not copy example from the prompt** in your response.
+        - **Don't think** for more than 4000 tokens
+
+        ### Input format:
+        Question: <question text>
+        Answer: <answer text>
+        Metadata: <meta data of the main company upon which the factoids are based.>
+        Groundings: [\<list of factoids that ground or support the answer\>]
+
+        ### Output format:
+        "reasonings": [\<explanation about every grounding regarding how or why it supports the answer\>]
+
+        ### Example Input:
+        Question: How does Apple’s commitment to achieving carbon neutrality across its supply chain and products by 2030, as discussed in its 10-K, affect its cost structure, supplier relationships, and long-term profitability, and what are the potential risks and rewards associated with this aggressive ESG strategy?
+        Answer: Apple’s environmental initiatives have a significant impact on its cost structure, supplier relationships, and long-term profitability. Upfront costs have risen due to investments in renewable energy, low-carbon manufacturing, and sustainable materials. However, the shift to clean energy and more energy-efficient processes may reduce operational costs over time. Additionally, integrating recycled and sustainable materials into product development increases design complexity and processing requirements, thereby raising costs.
+        Metdata: Company: Apple | SEC-filing: 10-K | Related Topic: Risk Factors and Challenges
+        Groundings: [
+            "Apple has committed to achieving carbon neutrality across its entire business, including supply chain and product life cycle, by 2030.",
+            "Apple invests in renewable energy and low-carbon manufacturing processes as part of its environmental sustainability goals.",
+            "The company requires its suppliers to comply with its environmental standards, including carbon reduction initiatives.",
+            "Apple works with suppliers to transition to clean energy and energy-efficient production methods.",
+            "The company integrates recycled and sustainable materials into product design and manufacturing.",
+            "Apple acknowledges that its environmental initiatives may lead to higher costs in the short term due to increased material and compliance expenses.",
+            "The company anticipates that its ESG efforts will improve brand reputation and customer loyalty.",
+            "Apple views its leadership in ESG initiatives as a competitive advantage, positioning it to mitigate future regulatory and environmental risks."
+        ]
+
+        ### Example Output (JSON):
+        "reasonings": [
+            "This grounding sets the foundation of the answer, as it directly reflects the core commitment Apple made—carbon neutrality across its business by 2030. This long-term strategic goal drives the operational, financial, and supplier-level changes discussed in the answer.",
+            "Investing in renewable energy and low-carbon manufacturing directly increases Apple's upfront costs, which explains the immediate impact on its cost structure as noted in the answer.",
+            "Requiring suppliers to comply with environmental standards introduces compliance costs and complexity across the supply chain, reinforcing the answer’s point about rising supplier-related expenses and risks.",
+            "Collaborating with suppliers on clean energy adoption supports long-term operational efficiencies and cost savings, aligning with the answer's assertion that energy-efficient practices may reduce future operational costs.",
+            "The use of recycled and sustainable materials increases product development costs due to design and processing complexity, which directly supports the answer’s explanation of how sustainability initiatives raise short-term expenses.",
+            "This grounding validates the answer’s claim that ESG initiatives increase short-term costs, particularly due to the need for new materials and compliance requirements, thus reinforcing the financial trade-offs involved.",
+            "Improved brand reputation and customer loyalty contribute to long-term profitability, as mentioned in the answer, especially among eco-conscious consumers willing to pay premium prices.",
+            "By viewing ESG leadership as a competitive advantage, Apple positions itself to navigate future regulatory and environmental challenges, which supports the answer’s framing of long-term strategic benefits and risk mitigation."
+        ]
+        
+        ### Input for your task:
+        """
+        grounding_instruction_prompt = grounding_instruction_prompt + f"\nQuestion: {qna_dict['query']}\nAnswer: {qna_dict['answer']}\nMetadata: {metadata}\nFactoids: {fact_doc_text}"
+
+        summary, gmessages = self.__execute_LLM_task(grounding_instruction_prompt, max_new_tokens=8192, temperature=0.1, top_p = 0.9, return_prompt_messages = True)
+        
+        print('Generated Response for groundings:\n', summary)
+
+        groundings_json_arr = self.__extract_json_array_by_key(summary, "groundings")
+        print('extracted json', groundings_json_arr)
+        cleaned_groundings = self.__clean_json_array(groundings_json_arr)
+        print('cleaned groundings: ', cleaned_groundings)
+        if len(cleaned_groundings) > 0:
+            grounding_str = "[" + ",\n".join(f"{item}" for item in cleaned_groundings) + "]"
+            reasoning_instruction_prompt = reasoning_instruction_prompt + f"\nQuestion: {qna_dict['query']}\nAnswer: {qna_dict['answer']}\nMetadata: {metadata}\nGroundings: {grounding_str}"
+            rsummary, rmessages = self.__execute_LLM_task(reasoning_instruction_prompt, max_new_tokens = 8192, temperature = 0.1, top_p = 0.9, return_prompt_messages = True)
+            print('Generated response for reasonings: ', rsummary)
+            reasonings_json_arr = self.__extract_json_array_by_key(rsummary, "reasonings")
+            print('extracted reasonings json', reasonings_json_arr)
+            cleaned_reasonings = self.__clean_json_array(reasonings_json_arr)
+            if len(cleaned_reasonings) > 0 and (len(cleaned_groundings) == len(cleaned_groundings)):
+                return {
+                    'groundings': cleaned_groundings,
+                    'reasonings': cleaned_reasonings
+                }
+
+        return None
+
+    def __generate_grounding_reasoning_pair_iteratively(self, metadata, qna_dict, factoid_list, qna_messages):
+        instruction_prompt = """
+        ### Task:
+        Analyze the provided set of question & answer pair, the provided factoid and metdata about the company upon which factoid is based,
+        and return yes/no response whether the fact supports the answer to the question. Also state your reasoning for it, citing relevant part of the
+        sentence in answer.
+
+        ### Generation Rules
+        - Return the final response in a structured JSON format, as shown in example. Use the example structure as reference to return the final response.
+        - Keep the reasoning explanation concise and under 30 words.
+        - **Do not use chinese characters** in your response for reasoning.
+        - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response for reasoning.
+        - **Do not copy example from the prompt** in your response.
+
+        ### Input format:
+        **Question:** <question text>
+        **Answer:** <answer text>
+        **Metadata:** <meta data of the main company upon which the factoids are based.>
+        **Factoid:** <factoid text>
+
+        ### Output format:
+        Response: {
+            "support": <yes/no response of whether the factoid supports the answer>
+            "reasoning": <concise explanation of why factoid supports the answer, citing the relevant part of the answer>
+        }
+
+        ### Example Input:
+        **Question:** How does Apple’s commitment to achieving carbon neutrality across its supply chain and products by 2030, as discussed in its 10-K, affect its cost structure, supplier relationships, and long-term profitability, and what are the potential risks and rewards associated with this aggressive ESG strategy?
+        **Answer:** Apple’s environmental initiatives have a significant impact on its cost structure, supplier relationships, and long-term profitability. Upfront costs have risen due to investments in renewable energy, low-carbon manufacturing, and sustainable materials. However, the shift to clean energy and more energy-efficient processes may reduce operational costs over time. Additionally, integrating recycled and sustainable materials into product development increases design complexity and processing requirements, thereby raising costs.
+        **Metadata:** Company: Apple | SEC-Filing: 10-K
+        **Factoid:** Apple continues to invest in renewable energy projects, carbon offset initiatives, and innovative low-carbon product designs to meet its sustainability goals.
+
+
+        ### Example Input/Output (JSON):
+        Response: {
+            "support": "yes",
+            "reasoning": "Higher upfront investments in sustainability - Directly affects cost structure by increasing capital expenditures on renewable energy and carbon offset projects"
         }
         
         ### Input for your task:
         """
-        grounding_instruction_prompt = grounding_instruction_prompt + f"\n**Metadata:** {metadata}\n**Factoids:**{fact_doc_text}\n**Question:** {qna_dict['query']}\n**Answer:** {qna_dict['answer']}"
-
-        summary, messages = self.__execute_LLM_task_chain(grounding_instruction_prompt, max_new_tokens=5000, temperature=0.2, top_p = 0.9, return_prompt_messages = True)
-        print('Generated Response for groundings:\n', summary)
-        return {}
+        for factoid in factoid_list:
+            instruction_prompt = instruction_prompt + f"\n**Question:** {qna_dict['query']}\n**Answer:** {qna_dict['answer']}\n**Metadata:** {metadata}\n**Factoid:**{factoid}"
+            print('prompt length: ', len(instruction_prompt))
+            summary, messages = self.__execute_LLM_task_chain(instruction_prompt, max_new_tokens=5000, temperature=0, top_p = 0.9, return_prompt_messages = True, prev_messages = qna_messages)
+            print('Generated Response for groundings:\n', summary)
+        return None
 
 
     def __generate_query_answer_pair(self, fact_doc_text, metadata):
@@ -352,13 +452,13 @@ class QueryGenerator:
         Query: <question generated from fact(s) in the given text document>
 
         ### Example Input
-        Metadata: Company name: AAPL | SEC Filing: 10-K
-        Factoids: ["Apple committed to carbon neutrality across its supply chain by 2030.",
+        Metadata: Company name: AAPL | SEC Filing: 10-K | Related Topic: Risk Factors and Challenges
+        Factoids: {["Apple committed to carbon neutrality across its supply chain by 2030.",
             "Apple sources renewable energy for its global operations.",
             "Apple integrates recycled materials into product design.",
             "The company works with suppliers to reduce emissions.",
             "Upfront costs have increased due to sustainability investments."
-        ]
+        ]}
 
         ### Example Output:
         Query: "How does Apple’s commitment to achieving carbon neutrality across its supply chain and products by 2030, as discussed in its 10-K, affect its cost structure, supplier relationships, and long-term profitability, and what are the potential risks and rewards associated with this aggressive ESG strategy?",
@@ -374,10 +474,11 @@ class QueryGenerator:
         - Generated answer is ONLY from the given factoids, **do not** hallucinate new information or factoids to answer the query.
         - Return the final answer as one single concise paragraph in a json object. Use the example output as reference for structure.
         - **Do not put chinese characters** in your response.
-        - Keep the generated answer concise and under 500 words.
+        - Keep the generated answer concise and under 200 words.
         - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response.
         - **Do not** put your chain of thought or reasoning steps in the response. Return **just the answer** in your final response.
         - **Do not copy example from the prompt** in your response.
+        - Don't think for more than 3000 tokens.
 
         ### Input format:
         Metadata: <meta data of the main company upon which the factoids are based.>
@@ -390,7 +491,7 @@ class QueryGenerator:
         }
 
         ### Example Input
-        Metadata: Company name: AAPL | SEC Filing: 10-K
+        Metadata: Company name: AAPL | SEC Filing: 10-K | Related Topic: Risk Factors and Challenges
         Factoids: ["Apple committed to carbon neutrality across its supply chain by 2030.",
             "Apple sources renewable energy for its global operations.",
             "Apple integrates recycled materials into product design.",
@@ -410,7 +511,7 @@ class QueryGenerator:
         qstn_instruction_prompt = qstn_instruction_prompt + f"\nMetadata: {metadata}\nFactoids: {fact_doc_text}"
         qna_pair = {}
 
-        summary, messages = self.__execute_LLM_task_chain(qstn_instruction_prompt, max_new_tokens=3000, temperature=0.2, top_p = 0.9, return_prompt_messages = True)
+        summary, qmessages = self.__execute_LLM_task_chain(qstn_instruction_prompt, max_new_tokens=3000, temperature=0.2, top_p = 0.9, return_prompt_messages = True)
         print('Generated Response:\n', summary)
         if "Query:" in summary:
             qi = summary.index("Query:")
@@ -419,71 +520,20 @@ class QueryGenerator:
                 query_str = summary[(qi+6):nli].strip()
                 print('Generated query: ', query_str)
             if query_str != None or query_str != "":
-                messages.append({"role": "system", "content": query_str })
+                #messages.append({"role": "system", "content": query_str })
                 answer_instruction_prompt = answer_instruction_prompt + f"\nMetadata: {metadata}\nFactoids: {fact_doc_text}\nQuery: {query_str}"
-                ans_summary, ans_messages = self.__execute_LLM_task_chain(answer_instruction_prompt, max_new_tokens=4096, temperature=0.2, top_p = 0.9,
+                ans_summary, ans_messages = self.__execute_LLM_task(answer_instruction_prompt, max_new_tokens=4096, temperature=0.2, top_p = 0.9,
                     return_prompt_messages = True)
                 print('Generated answer response:\n', ans_summary)
-                answer_json = self.__extract_json_from_text(ans_summary, "answer")
+                answer_json = self.__extract_json_text_by_key(ans_summary, "answer")
                 if answer_json != None:
                     qna_pair = {
                         'query': query_str,
                         'answer': answer_json["answer"]
                     }
-                    return qna_pair
-        return None
+                    return qna_pair, qmessages, ans_messages
+        return None, [], []
 
-
-    def __generate_query(self, fact_doc_text, metadata):
-
-        instruction_prompt = f"""
-        ### Task:
-        Analyze the provided set of factoids and the metadata and generate **only one structured response** as described below.
-
-        ### Desired response structure:  
-        - **Query**: Write a complex question based on the factoids.
-        - **Answer**: Write a concise answer to the question generated.
-
-        ### Generation Rules
-        - **Do not use chinese characters** in your response.
-        - Phrase your response as concisely as possible.
-        - Keep the query under 100 tokens.
-        - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response for either question or the answer.
-        - End the response with `###EOF###`.  
-        - Use the example structure to return the final response.
-        - Label your chain-of-thought as `###COT###` and the final answer as `###FINALRESPONSE###`.
-        - **Do not copy example from the prompt** in your response.
-
-        ### Input format:
-        **Metadata:** <meta data of the main company upon which the factoids are based.>
-        **Factoids:** [\<list of factoids\>]
-
-        ### Output format:
-        **Query:** <question generated from fact(s) in the given text document>
-
-        ### Example Output:
-
-        ###FINAL RESPONSE###
-        Query: How does Apple’s commitment to achieving carbon neutrality across its supply chain and
-        products by 2030, as discussed in its 10-K, affect its cost structure, supplier relationships,
-        and long-term profitability, and what are the potential risks and rewards associated with
-        this aggressive ESG strategy?
-
-        **Answer:**
-        Apple’s environmental initiatives have a significant impact on its cost structure, supplier relationships, and long-term profitability. Upfront costs have risen due to investments in renewable energy, low-carbon manufacturing, and sustainable materials. However, the shift to clean energy and more energy-efficient processes may reduce operational costs over time. Additionally, integrating recycled and sustainable materials into product development increases design complexity and processing requirements, thereby raising costs.
-        On the supply side, Apple mandates carbon reduction compliance from its suppliers, leading to higher compliance costs for those partners. Some suppliers may struggle to meet ESG standards, which could cause supply chain disruptions and increase component expenses. Nonetheless, Apple is strengthening its relationships with sustainable suppliers, gaining long-term cost advantages and fostering innovation.
-        From a profitability perspective, Apple benefits from an enhanced brand reputation, which appeals to environmentally conscious consumers and supports premium pricing. Early adoption of ESG practices also mitigates future risks associated with carbon taxes and tighter environmental regulations. Although short-term profitability may be affected by increased expenses, the long-term financial gains are expected to outweigh these initial investments.
-
-        ### Input for your task:
-        """
-
-        instruction_prompt = instruction_prompt + f"\n**Metadata:** {metadata}\n**Factoids:**{fact_doc_text}"
-
-        summary = self.__execute_LLM_task(instruction_prompt, max_new_tokens=5000, temperature=0.3, top_p = 0.5)
-        print('Generated Response:\n', summary)
-        query_dict = self.__cleanup_query(summary)
-        print(query_dict)
-        #self.__extract_clean_queryset(summary)
 
     def generate_query(self, no_of_trials = 10):
         st = time()
@@ -515,7 +565,7 @@ class QueryGenerator:
             filtered_factoids = [factoid for factoid in all_factoids if factoid["topic"] == SEED_METADATA_TOPICS[self.topic_index]]
             print('total length of filtered array: ', len(filtered_factoids))
             #factoid_subarr = all_factoids[:MAX_FACTOIDS_TO_SAMPLE]
-            metadata = f'Company: {self.company_abbr} | SEC Filing: 10-K'
+            metadata = f'Company: {self.company_abbr} | SEC Filing: 10-K | Related topic: {SEED_METADATA_TOPICS[self.topic_index]}'
             #for idx in random_indices:
                 #factoid_subarr.append(all_factoids[idx])
             all_resp = []
@@ -523,25 +573,35 @@ class QueryGenerator:
             for i in range(0, len(filtered_factoids), MAX_FACTOIDS_TO_SAMPLE):
                 factoid_subarr = filtered_factoids[i:i+MAX_FACTOIDS_TO_SAMPLE]
                 if len(factoid_subarr) >= 15:
-                    factoid_str = "[" + ",".join(f"{item['factoid']}" for item in factoid_subarr) + "]"
-                    qna_pairs = []
+                    factoid_str = "[" + ",\n".join(f"{item['factoid']}" for item in factoid_subarr) + "]"
                     print(f'\nRunning {no_of_trials} qna generation for factoids batch {i}')
                     for i in range(no_of_trials):
-                        query_dict = self.__generate_query_answer_pair(factoid_str, metadata)
-                        print('generated qna pair: ', query_dict)
-                        if query_dict != None and self.__is_valid_sentence(query_dict["query"]) and self.__is_valid_sentence(query_dict["answer"], 500):
-                            qna_pairs.append(query_dict)
-                    print(f'Found {len(qna_pairs)} valid qna pairs')
-                
-                '''
+                        qna_pair, qmessages, ans_messages = self.__generate_query_answer_pair(factoid_str, metadata)
+                        print('generated qna pair: ', qna_pair)
+                        is_qvalid = self.__is_valid_sentence(qna_pair["query"])
+                        is_avalid = self.__is_valid_sentence(qna_pair["answer"], 200)
+                        if qna_pair != None and is_qvalid and is_avalid:
+                            #qna_pairs.append(query_dictj
+                            #qmessages.append({"role": "system", "content": "Query: " + qna_pair['query']})
+                            #ans_messages.append({"role": "system", "content": "Answer: " + qna_pair['answer']})
+                            #qna_messages = qmessages + ans_messages[1:]
+                            #print('\nQNA message', qna_messages)
+                            #query_dict = self.__generate_grounding_reasoning_pair_iteratively(metadata, qna_pair, factoid_subarr, qna_messages)
+                            query_dict = self.__generate_grounding_reasoning_pair(factoid_str, metadata, qna_pair)
+                            if query_dict != None and "reasonings" in query_dict and "groundings" in query_dict:
+                                query_dict = query_dict | qna_pair
+                                all_resp.append(query_dict)
+                        elif qna_pair != None and not(is_avalid):
+                            cleaned_answer = self.__cleanup_sentence(qna_pair["answer"])
+                            if self.__is_valid_sentence(cleaned_answer, 200):
+                                qna_pair["answer"] = cleaned_answer
+                                query_dict = self.__generate_grounding_reasoning_pair(factoid_str, metadata, qna_pair)
+                                if query_dict != None and "reasonings" in query_dict and "groundings" in query_dict:
+                                    query_dict = query_dict | qna_pair
+                                    all_resp.append(query_dict)
 
-                for qnapair in qna_pairs:
-                    query_dict = self.__generate_grounding_reasoning_pair(factoid_str, metadata, qnapair)
-                    if "reasoning" in query_dict and "groundings" in query_dict:
-                        query_dict = query_dict | qnapair
-                        all_resp.append(query_dict)
-                '''
-                all_resp = all_resp + qna_pairs
+                    #print(f'Found {len(qna_pairs)} valid qna pairs')
+                #all_resp = all_resp + qna_pairs
             print('No of valid whole set: ', len(all_resp))
             query_json_path = f'./data/queries/{self.model_folder}/{self.filename}_gen_queries.json'
             if os.path.exists(query_json_path):
