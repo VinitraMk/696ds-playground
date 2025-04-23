@@ -10,6 +10,15 @@ from time import time
 import sys
 import argparse
 import re
+#from awq import AutoAWQForCausalLM, AWQConfig
+import random
+
+COMPANY_DICT = {
+    'INTC': 'Intel Corp.',
+    'AMD': 'AMD Inc.',
+    'NVDA': 'Nvidia Corp.',
+    'TSLA': 'Tesla Inc.'
+}
 
 MODELS = [
     "meta-llama/Llama-2-70b-hf",
@@ -44,7 +53,7 @@ class QueryGenerator:
     def __init__(self, filename, model_index = 0, topic_index = 0):
         self.filename = filename
         self.topic_index = topic_index
-        self.company_abbr = filename.split('_')[1]
+        self.company_abbr = COMPANY_DICT[filename.split('_')[1]]
         self.model_name = MODELS[model_index]
         if "QwQ" in self.model_name:
             self.llm = LLM(model=f"./models/{self.model_name}",
@@ -60,7 +69,30 @@ class QueryGenerator:
                 max_model_len = 2048 * 4,
                 gpu_memory_utilization=0.95,
                 tensor_parallel_size=torch.cuda.device_count())
+        elif "Llama" in self.model_name:
+            #mf = self.model_name.split("/")[1]
+            self.__quantize_llama(self.model_name)
+            self.llm = LLM(model=f"./models/llama/{self.model_name}-awq",
+                quantization="awq",
+                gpu_memory_utilization=0.8,
+                download_dir = f'./models/llama/{self.model_name}-awq',
+                tensor_parallel_size=torch.cuda.device_count())
+            self.model_folder = "llama"
         self.model_folder = "qwq"
+
+    # utility functions
+
+    def __quantize_llama(self, model_name):
+        quant_model = AutoAWQForCausalLM.from_pretrained(
+            model_name,
+            quant_config=AWQConfig(
+                bits=4,
+                group_size=128,  # Optional; depends on the model you're targeting
+                zero_point=True, # Optional; enables zero-point quantization
+            ),
+            cache_dir = HF_CACHE_DIR
+        )
+        quant_model.save_pretrained(f"./models/llama/{model_name}-awq")
 
     def __extract_json_text_by_key(self, raw_text, target_key):
         """
@@ -101,6 +133,9 @@ class QueryGenerator:
     def __is_valid_sentence(self, sentence, word_count_limit = 100):
     
         sentence = sentence.strip()
+
+        if sentence == 'None' or sentence == "":
+            return False
         
         if re.search(r'[\u4e00-\u9fff]', sentence):  # Unicode range for Chinese characters
             return False
@@ -116,18 +151,37 @@ class QueryGenerator:
         
         return True
     
-    def __execute_LLM_task_chain(self, prompt, max_new_tokens, temperature = 0.3, top_p = 0.9, return_prompt_messages = False, prev_messages = []):
+
+    # utility LLM functions
+
+    def __get_prompt_token(self, prompt_text):
+        
+        tokenizer = AutoTokenizer.from_pretrained(f"./models/{self.model_name}")
+        tokenizer.lang = "en"
+
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant that extracts factoids from text."},
+            {"role": "user", "content": prompt_text}
+        ]
+        prompt = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        return prompt
+    
+    def __execute_LLM_task_chain(self, prompts, max_new_tokens, temperature = 0.3, top_p = 0.9, return_prompt_messages = False, prev_messages = []):
         if len(prev_messages) == 0:
-            return self.__execute_LLM_task(prompt = prompt, max_new_tokens = max_new_tokens, temperature = temperature, top_p = top_p, return_prompt_messages = return_prompt_messages)
+            return self.__execute_LLM_task(prompt = prompts, max_new_tokens = max_new_tokens, temperature = temperature, top_p = top_p, return_prompt_messages = return_prompt_messages)
         else:
-            tokenizer = AutoTokenizer.from_pretrained(f"./models/{self.model_name}")
-            tokenizer.lang = "en"
+            #tokenizer = AutoTokenizer.from_pretrained(f"./models/{self.model_name}")
+            #tokenizer.lang = "en"
             prev_messages.append({"role": "user", "content": prompt })
-            text = tokenizer.apply_chat_template(
-                prev_messages,
-                tokenize=False,
-                add_generation_prompt=True
-            )
+            #text = tokenizer.apply_chat_template(
+                #prev_messages,
+                #tokenize=False,
+                #add_generation_prompt=True
+            #)
             sampling_params = SamplingParams(
                 max_tokens=max_new_tokens,
                 temperature=temperature,
@@ -136,31 +190,32 @@ class QueryGenerator:
                 stop=["###EOF###"]
             )
             #model_inputs = tokenizer([text], return_tensors="pt").to(self.device)
-            outputs = self.llm.generate(text, sampling_params)
-            response_text = tokenizer.decode(
-                outputs[0].outputs[0].token_ids,
-                skip_special_tokens=True,
-                clean_up_tokenization_spaces=True  # Ensures proper spacing
-            )
+            outputs = self.llm.generate(prompts, sampling_params)
+            return outputs
+            #response_text = tokenizer.decode(
+                #outputs[0].outputs[0].token_ids,
+                #skip_special_tokens=True,
+                #clean_up_tokenization_spaces=True  # Ensures proper spacing
+            #)
             #return outputs[0].outputs[0].text if outputs else ""
             if return_prompt_messages:
                 return response_text, prev_messages
             return response_text
 
     
-    def __execute_LLM_task(self, prompt, max_new_tokens, temperature = 0.3, top_p = 0.9, return_prompt_messages = False):
+    def __execute_LLM_tasks(self, prompts, max_new_tokens, temperature = 0.3, top_p = 0.9):
         #tokenizer = AutoTokenizer.from_pretrained(self.model_name, cache_dir = os.environ['HF_HOME'])
-        tokenizer = AutoTokenizer.from_pretrained(f"./models/{self.model_name}")
-        tokenizer.lang = "en"
-        messages = [
-            {"role": "system", "content": "You are Qwen, created by Alibaba Cloud. You are a helpful assistant that given a task returns a response following the exact structured output format specified in the prompt. Respond only in English"},
-            {"role": "user", "content": prompt}
-        ]
-        text = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
+        #tokenizer = AutoTokenizer.from_pretrained(f"./models/{self.model_name}")
+        #tokenizer.lang = "en"
+        #messages = [
+            #{"role": "system", "content": "You are Qwen, created by Alibaba Cloud. You are a helpful assistant that given a task returns a response following the exact structured output format specified in the prompt. Respond only in English"},
+            #{"role": "user", "content": prompt}
+        #]
+        #text = tokenizer.apply_chat_template(
+            #messages,
+            #tokenize=False,
+            #add_generation_prompt=True
+        #)
         sampling_params = SamplingParams(
             max_tokens=max_new_tokens,
             temperature=temperature,
@@ -169,27 +224,26 @@ class QueryGenerator:
             stop=["###EOF###"]
         )
         #model_inputs = tokenizer([text], return_tensors="pt").to(self.device)
-        outputs = self.llm.generate(text, sampling_params)
-        response_text = tokenizer.decode(
-            outputs[0].outputs[0].token_ids,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=True  # Ensures proper spacing
-        )
+        outputs = self.llm.generate(prompts, sampling_params)
+        #response_text = tokenizer.decode(
+            #outputs[0].outputs[0].token_ids,
+            #skip_special_tokens=True,
+            #clean_up_tokenization_spaces=True  # Ensures proper spacing
+        #)
         #return outputs[0].outputs[0].text if outputs else ""
-        if return_prompt_messages:
-            return response_text, messages
-        return response_text
+        return outputs
     
-    def __cleanup_sentence(self, sentence):
+    def __cleanup_sentence(self, sentences):
         cleanup_instruction = """
         ### Task:
         Given a sentence, riddled with grammatical, punctuation, insensible/gibberish words or typos (missing spaces), remove
-        the errors and return a clean, grammatically correct and meaningful sentence if it exists. If such a sentence doesn't exist,
-        return a blank string "".
+        the errors and return a clean, grammatically correct and meaningful sentence if it exists. If a meaningful sentence doesn't exist,
+        return a blank string "". If there are no errors in the text, return it as is.
 
         ### Cleanup Rules:
         - Remove punctuation mistakes such as missing spaces, incorrectly placed hyphens, obvious typos, etc.
         - Return a grammatically correct and meaningful sentence. If it doesn't exist, return "".
+        - Remove chinese characters.
         - If the sentence contains gibberish, insensible words return "".
         - **Do not** make a completely new sentence.
         - **Do not** hallucinate completely new words in the sentence.
@@ -208,33 +262,38 @@ class QueryGenerator:
         Cleaned Text: "US Government introduced licensing requirements impacting exports to China, Hong Kong, Macau, and Russia, including AI IC and HI integrated circuits during the third quarter of Fiscal Year II."
 
         ### Example Input:
-        Text: To create an intricate inquiry leveraging several provided facts about Nvidia (NVDA), I focused primarily around how regulatory constraints tied directly back toward broader corporate vulnerabilities stemming partly out environment-centric policies/risks; especially those involving governmental oversight concerning international trade alongside internal pressures arising because excessive resource usage patterns may provoke additional scrutiny/litigation threats down road if mishandles appropriately enough moving forward strategically speaking wise-wise mannerism approachable way feasible indeed possible certainly achievable realistically attainably feasibly plausible logically reasonable sensically rationally understandably comprehensibly coherently consistently maintainingly sustainabily durablly persistantly continuously perpetually enduringlty lastling
+        Text: "To create an intricate inquiry leveraging several provided facts about Nvidia (NVDA), I focused primarily around how regulatory constraints tied directly back toward broader corporate vulnerabilities stemming partly out environment-centric policies/risks; especially those involving governmental oversight concerning international trade alongside internal pressures arising because excessive resource usage patterns may provoke additional scrutiny/litigation threats down road if mishandles appropriately enough moving forward strategically speaking wise-wise mannerism approachable way feasible indeed possible certainly achievable realistically attainably feasibly plausible logically reasonable sensically rationally understandably comprehensibly coherently consistently maintainingly sustainabily durablly persistantly continuously perpetually enduringlty lastling"
 
         ### Example Output:
         Cleaned Text: ""
 
+        ### Example Input:
+        Text: "Apple works with suppliers to transition to clean energy and energy-efficient production methods."
+        Cleaned Text: "Apple works with suppliers to transition to clean energy and energy-efficient production methods."
+
         ### Input for your task:
         """
-
-        cleanup_instruction = cleanup_instruction + f"\nText: \"{sentence}\""
-        summary = self.__execute_LLM_task(prompt=cleanup_instruction, max_new_tokens=2000, temperature=0.1, top_p=0.9)
-        print('generated clean up response', summary)
-        match = re.search(r'Cleaned\s+Text:\s*"([^"]+)"', summary)
-        return match.group(1) and self.__is_valid_sentence(match.group(1)) if match else ""
+        cleaned_sentences = []
+        cleanup_instructions = [cleanup_instruction + f"\nText: \"{sentence}\"" for sentence in sentences]
+        cleanup_instruction_prompt_tokens = [self.__get_prompt_token(prompt) for prompt in cleanup_instructions]
+        coutputs = self.__execute_LLM_tasks(prompts=cleanup_instruction_prompt_tokens, max_new_tokens=2000, temperature=0.1, top_p=0.9)
+        for o in coutputs:
+            osummary = o.outputs[0].text.strip()
+            print('generated clean up response', osummary)
+            match = re.search(r'Cleaned\s+Text:\s*"([^"]+)"', osummary)
+            if (match and self.__is_valid_sentence(match.group(1))):
+                cleaned_sentences.append(match.group(1))
+            else:
+                cleaned_sentences.append("")
+        return cleaned_sentences
     
     def __clean_json_array(self, json_arr):
-        cleaned_json_arr = []
-        if json_arr != None:
-            for st in json_arr:
-                if self.__is_valid_sentence(st):
-                    cleaned_json_arr.append(st)
-                else:
-                    cleaned_sentence = self.__cleanup_sentence(st)
-                    if cleaned_sentence != "":
-                        cleaned_json_arr.append(cleaned_sentence)
-        return cleaned_json_arr
+        cleaned_sentences = []
+        if json_arr != None and len(json_arr) > 0:
+            cleaned_sentences = self.__cleanup_sentence(json_arr)
+        return cleaned_sentences
 
-    def __generate_grounding_reasoning_pair(self, fact_doc_text, metadata, qna_dict):
+    def __generate_grounding_reasoning_pair(self, fact_doc_text, metadata, qna_dict, no_of_trials = 10):
         grounding_instruction_prompt = """
         ### Task:
         Analyze the provided question and answer pair, set of factoids and the metadata about the facts, generate groundings for the question and answer pair.
@@ -353,29 +412,59 @@ class QueryGenerator:
         
         ### Input for your task:
         """
-        grounding_instruction_prompt = grounding_instruction_prompt + f"\nQuestion: {qna_dict['query']}\nAnswer: {qna_dict['answer']}\nMetadata: {metadata}\nFactoids: {fact_doc_text}"
+        grounding_instruction_prompts = [grounding_instruction_prompt + f"\nQuestion: {qna_dict['query']}\nAnswer: {qna_dict['answer']}\nMetadata: {metadata}\nFactoids: {fact_doc_text}" for _ in range(no_of_trials)]
+        grounding_instruction_prompt_tokens = [self.__get_prompt_token(prompt) for prompt in grounding_instruction_prompts]
+        goutputs = self.__execute_LLM_tasks(grounding_instruction_prompt_tokens, max_new_tokens=8192, temperature=0.1, top_p=0.9)
 
-        summary, gmessages = self.__execute_LLM_task(grounding_instruction_prompt, max_new_tokens=8192, temperature=0.1, top_p = 0.9, return_prompt_messages = True)
+        #summary, gmessages = self.__execute_LLM_task(grounding_instruction_prompt, max_new_tokens=8192, temperature=0.1, top_p = 0.9, return_prompt_messages = True)
         
-        print('Generated Response for groundings:\n', summary)
-
-        groundings_json_arr = self.__extract_json_array_by_key(summary, "groundings")
+        #print('Generated Response for groundings:\n', summary)
+        grounding_jsons = []
+        ml = -1
+        best_groundings = []
+        for o in goutputs:
+            gsummary = o.outputs[0].text.strip()
+            groundings_json_arr = self.__extract_json_array_by_key(gsummary, "groundings")
+            cleaned_groundings = self.__clean_json_array(groundings_json_arr)
+            cleaned_groundings = [s for s in cleaned_groundings if s != ""]
+            print('cleaned groundings: ', cleaned_groundings)
+            ml = max(ml, len(cleaned_groundings))
+            grounding_jsons.append(cleaned_groundings)
+        
         print('extracted json', groundings_json_arr)
-        cleaned_groundings = self.__clean_json_array(groundings_json_arr)
-        print('cleaned groundings: ', cleaned_groundings)
-        if len(cleaned_groundings) > 0:
-            grounding_str = "[" + ",\n".join(f"{item}" for item in cleaned_groundings) + "]"
-            reasoning_instruction_prompt = reasoning_instruction_prompt + f"\nQuestion: {qna_dict['query']}\nAnswer: {qna_dict['answer']}\nMetadata: {metadata}\nGroundings: {grounding_str}"
-            rsummary, rmessages = self.__execute_LLM_task(reasoning_instruction_prompt, max_new_tokens = 8192, temperature = 0.1, top_p = 0.9, return_prompt_messages = True)
+        best_groundings = [gs for gs in grounding_jsons if len(gs) == ml]
+        best_grounding_strs = ["[" + ",\n".join(f"{item}" for item in cg) + "]" for cg in best_groundings]
+        reasoning_instruction_prompts = [reasoning_instruction_prompt + f"\nQuestion: {qna_dict['query']}\nAnswer: {qna_dict['answer']}\nMetadata: {metadata}\nGroundings: {grounding_str}" for grounding_str in best_grounding_strs]
+        reasoning_instruction_prompt_tokens = [self.__get_prompt_token(prompt) for prompt in reasoning_instruction_prompts]
+        routputs = self.__execute_LLM_tasks(reasoning_instruction_prompt_tokens, max_new_tokens = 8192, temperature = 0.1, top_p = 0.9)
+
+        # return only valid and the best reasoning-groundings pair
+        ml = -1
+        mli = []
+        valid_groundings_coll = []
+        valid_reasonings_coll = []
+        for j,o in enumerate(routputs):
+            rsummary = o.outputs[0].text.strip()
             print('Generated response for reasonings: ', rsummary)
             reasonings_json_arr = self.__extract_json_array_by_key(rsummary, "reasonings")
             print('extracted reasonings json', reasonings_json_arr)
             cleaned_reasonings = self.__clean_json_array(reasonings_json_arr)
-            if len(cleaned_reasonings) > 0 and (len(cleaned_groundings) == len(cleaned_groundings)):
-                return {
-                    'groundings': cleaned_groundings,
-                    'reasonings': cleaned_reasonings
-                }
+            cleaned_groundings = best_groundings[j]
+            valid_reasonings = [cr for _,cr in enumerate(cleaned_reasonings) if cr != ""]
+            valid_groundings = [cleaned_groundings[ri] for ri,cr in enumerate(cleaned_reasonings) if cr != ""]
+            if len(valid_groundings) > 0 and len(valid_reasonings) > 0:
+                valid_groundings_coll.append(valid_groundings)
+                valid_reasonings_coll.append(valid_reasonings)
+        for j in range(len(valid_groundings_coll)):
+            ml = max(ml, len(valid_groundings_coll[j]))
+            if len(valid_groundings_coll[j]) == ml:
+                mli.append(j)
+        if len(mli) > 0:
+            mi = random.choice(mli)
+            return {
+                'reasonings': valid_reasonings_coll[mi],
+                'groundings': valid_groundings_coll[mi]
+            }
 
         return None
 
@@ -423,12 +512,12 @@ class QueryGenerator:
         for factoid in factoid_list:
             instruction_prompt = instruction_prompt + f"\n**Question:** {qna_dict['query']}\n**Answer:** {qna_dict['answer']}\n**Metadata:** {metadata}\n**Factoid:**{factoid}"
             print('prompt length: ', len(instruction_prompt))
-            summary, messages = self.__execute_LLM_task_chain(instruction_prompt, max_new_tokens=5000, temperature=0, top_p = 0.9, return_prompt_messages = True, prev_messages = qna_messages)
+            #summary, messages = self.__execute_LLM_task_chain(instruction_prompt, max_new_tokens=5000, temperature=0, top_p = 0.9, return_prompt_messages = True, prev_messages = qna_messages)
             print('Generated Response for groundings:\n', summary)
         return None
 
 
-    def __generate_query_answer_pair(self, fact_doc_text, metadata):
+    def __generate_query_answer_pair(self, fact_doc_text, metadata, no_of_trials = 10):
 
         qstn_instruction_prompt = """
         ### Task:
@@ -509,30 +598,47 @@ class QueryGenerator:
         """
 
         qstn_instruction_prompt = qstn_instruction_prompt + f"\nMetadata: {metadata}\nFactoids: {fact_doc_text}"
-        qna_pair = {}
+        qstn_prompt_tokens = [self.__get_prompt_token(qstn_instruction_prompt) for _ in range(no_of_trials)]
+        qoutputs = self.__execute_LLM_tasks(qstn_prompt_tokens, max_new_tokens=3000, temperature=0.2, top_p=0.9)
 
-        summary, qmessages = self.__execute_LLM_task_chain(qstn_instruction_prompt, max_new_tokens=3000, temperature=0.2, top_p = 0.9, return_prompt_messages = True)
-        print('Generated Response:\n', summary)
-        if "Query:" in summary:
-            qi = summary.index("Query:")
-            if "\n" in summary[(qi+6):]:
-                nli = summary.index("\n")
-                query_str = summary[(qi+6):nli].strip()
-                print('Generated query: ', query_str)
-            if query_str != None or query_str != "":
-                #messages.append({"role": "system", "content": query_str })
-                answer_instruction_prompt = answer_instruction_prompt + f"\nMetadata: {metadata}\nFactoids: {fact_doc_text}\nQuery: {query_str}"
-                ans_summary, ans_messages = self.__execute_LLM_task(answer_instruction_prompt, max_new_tokens=4096, temperature=0.2, top_p = 0.9,
-                    return_prompt_messages = True)
-                print('Generated answer response:\n', ans_summary)
-                answer_json = self.__extract_json_text_by_key(ans_summary, "answer")
-                if answer_json != None:
-                    qna_pair = {
-                        'query': query_str,
-                        'answer': answer_json["answer"]
-                    }
-                    return qna_pair, qmessages, ans_messages
-        return None, [], []
+        #summary, qmessages = self.__execute_LLM_task_chain(qstn_instruction_prompt, max_new_tokens=3000, temperature=0.2, top_p = 0.9, return_prompt_messages = True)
+        #print('Generated Response:\n', summary)
+        qna_pairs = []
+        query_strs = []
+        for j, o in enumerate(qoutputs):
+            qsummary = o.outputs[0].text.strip()
+            print(f'generated {j}th response for question: ', qsummary)
+            if "Query:" in qsummary:
+                qi = qsummary.index("Query:")
+                if "\n" in qsummary[(qi+6):]:
+                    nli = qsummary.index("\n")
+                    query_str = qsummary[(qi+6):nli].strip()
+                    print('Generated query: ', query_str)
+                    if self.__is_valid_sentence(query_str):
+                        query_strs.append(query_str)
+        answer_instruction_prompts = [answer_instruction_prompt + f"\nMetadata: {metadata}\nFactoids: {fact_doc_text}\nQuery: {q}" for q in query_strs]
+        answer_prompt_tokens = [self.__get_prompt_token(prompt_text=prompt) for prompt in answer_instruction_prompts]
+        aoutputs = self.__execute_LLM_tasks(answer_prompt_tokens, max_new_tokens=4096, temperature=0.2, top_p = 0.9)
+        for query_str,o in zip(query_strs, aoutputs):
+            ans_summary = o.outputs[0].text.strip()
+            print('Generated answer response:\n', ans_summary)
+            answer_json = self.__extract_json_text_by_key(ans_summary, "answer")
+            if answer_json != None:
+                qna_pair = {
+                    'query': query_str,
+                    'answer': answer_json["answer"]
+                }
+                qna_pairs.append(qna_pair)
+        ans_strs = [qob['answer'] for qob in qna_pairs]
+        cleaned_answers = self.__cleanup_sentence(ans_strs)
+        cleaned_qna_pairs = []
+        for ci,cleaned_ans in enumerate(cleaned_answers):
+            if cleaned_ans != "":
+                cleaned_qna_pairs.append({
+                    'query': qna_pairs[ci]['query'],
+                    'answer': cleaned_ans
+                })
+        return cleaned_qna_pairs
 
 
     def generate_query(self, no_of_trials = 10):
@@ -575,33 +681,14 @@ class QueryGenerator:
                 if len(factoid_subarr) >= 15:
                     factoid_str = "[" + ",\n".join(f"{item['factoid']}" for item in factoid_subarr) + "]"
                     print(f'\nRunning {no_of_trials} qna generation for factoids batch {i}')
-                    for i in range(no_of_trials):
-                        qna_pair, qmessages, ans_messages = self.__generate_query_answer_pair(factoid_str, metadata)
-                        print('generated qna pair: ', qna_pair)
-                        is_qvalid = self.__is_valid_sentence(qna_pair["query"])
-                        is_avalid = self.__is_valid_sentence(qna_pair["answer"], 200)
-                        if qna_pair != None and is_qvalid and is_avalid:
-                            #qna_pairs.append(query_dictj
-                            #qmessages.append({"role": "system", "content": "Query: " + qna_pair['query']})
-                            #ans_messages.append({"role": "system", "content": "Answer: " + qna_pair['answer']})
-                            #qna_messages = qmessages + ans_messages[1:]
-                            #print('\nQNA message', qna_messages)
-                            #query_dict = self.__generate_grounding_reasoning_pair_iteratively(metadata, qna_pair, factoid_subarr, qna_messages)
-                            query_dict = self.__generate_grounding_reasoning_pair(factoid_str, metadata, qna_pair)
-                            if query_dict != None and "reasonings" in query_dict and "groundings" in query_dict:
-                                query_dict = query_dict | qna_pair
-                                all_resp.append(query_dict)
-                        elif qna_pair != None and not(is_avalid):
-                            cleaned_answer = self.__cleanup_sentence(qna_pair["answer"])
-                            if self.__is_valid_sentence(cleaned_answer, 200):
-                                qna_pair["answer"] = cleaned_answer
-                                query_dict = self.__generate_grounding_reasoning_pair(factoid_str, metadata, qna_pair)
-                                if query_dict != None and "reasonings" in query_dict and "groundings" in query_dict:
-                                    query_dict = query_dict | qna_pair
-                                    all_resp.append(query_dict)
-
-                    #print(f'Found {len(qna_pairs)} valid qna pairs')
-                #all_resp = all_resp + qna_pairs
+                    qna_pairs = self.__generate_query_answer_pair(factoid_str, metadata, no_of_trials)
+                    print('No of valid qna pairs: ', len(qna_pairs))
+                    for qna_pair in qna_pairs:
+                        query_dict = self.__generate_grounding_reasoning_pair(factoid_str, metadata, qna_pair, no_of_trials)
+                        if query_dict != None and "reasonings" in query_dict and "groundings" in query_dict:
+                            query_dict = query_dict | qna_pair
+                            all_resp.append(query_dict)
+                        
             print('No of valid whole set: ', len(all_resp))
             query_json_path = f'./data/queries/{self.model_folder}/{self.filename}_gen_queries.json'
             if os.path.exists(query_json_path):
@@ -641,11 +728,9 @@ if __name__ == "__main__":
     parser.add_argument('--topic_index', type=int, default = 0, required = False)
     parser.add_argument('--model_index', type=int, default = 6, required = False)
     parser.add_argument('--no_of_trials', type = int, default = 10, required = False)
+    parser.add_argument('--filename', type = str, default = '10-K_NVDA_20240128', required = False)
 
     args = parser.parse_args()
 
-    #filename = '10-K_AMD_20231230'
-    filename = '10-K_NVDA_20240128'
-
-    query_gen = QueryGenerator(filename, model_index = args.model_index, topic_index = args.topic_index)
+    query_gen = QueryGenerator(filename = args.filename, model_index = args.model_index, topic_index = args.topic_index)
     query_gen.generate_query(no_of_trials = args.no_of_trials)

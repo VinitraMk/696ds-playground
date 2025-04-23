@@ -40,6 +40,7 @@ HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggin
 os.environ['HF_HOME'] = HF_CACHE_DIR
 
 RELEVANCE_THRESHOLD = 2.0
+CHUNK_BATCH_SIZE = 10
 
 class FactoidGen:
 
@@ -269,17 +270,26 @@ class FactoidGen:
         Text Chunk: \"\"\"{chunk}\"\"\"
         """
 
-        chunk_to_prompts = {f'{chunk["chunk_index"]}': instruction_prompt.format(topic=topic, chunk=chunk["text"]) for chunk in chunks}
-        prompts = [self.__get_prompt(p) for p in chunk_to_prompts.values()]
-        outputs = self.__execute_LLM_tasks(prompts)
-        res = {}
-        for i, o in zip(chunk_to_prompts.keys(), outputs):
-            print(f'generated response for chunk {i}: ', o.outputs[0].text.strip())
-            out = self.__extract_and_clean_factoids(o.outputs[0].text.strip())
-            if out:
-                res[i] = out
-        print('resulting factoids', res)
-        return res
+        all_res = {}
+
+        for i in range(0, len(chunks), CHUNK_BATCH_SIZE):
+            print(f'\nProcessing chunk batch {i}')
+            chunk_batch = chunks[i:(i+CHUNK_BATCH_SIZE)]
+            chunk_to_prompts = {f'{chunk["chunk_index"]}': instruction_prompt.format(topic=topic, chunk=chunk["text"]) for chunk in chunk_batch}
+            print('Building prompts for chunks')
+            prompts = [self.__get_prompt(p) for p in chunk_to_prompts.values()]
+            print('Prompting LLM')
+            outputs = self.__execute_LLM_tasks(prompts)
+            res = {}
+            for j, o in zip(chunk_to_prompts.keys(), outputs):
+                print(f'generated response for chunk {j}: ', o.outputs[0].text.strip())
+                out = self.__extract_and_clean_factoids(o.outputs[0].text.strip())
+                if out:
+                    res[j] = out
+            print('resulting factoids', res, len(res.keys()))
+            all_res = all_res | res
+        print('dict len', len(all_res.keys()))
+        return all_res
 
     def generate_factoids(self):
         st = time()
