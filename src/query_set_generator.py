@@ -17,7 +17,9 @@ COMPANY_DICT = {
     'INTC': 'Intel Corp.',
     'AMD': 'AMD Inc.',
     'NVDA': 'Nvidia Corp.',
-    'TSLA': 'Tesla Inc.'
+    'TSLA': 'Tesla Inc.',
+    'F': 'Ford Motor Company',
+    'GM': 'General Motors'
 }
 
 MODELS = [
@@ -94,6 +96,15 @@ class QueryGenerator:
         )
         quant_model.save_pretrained(f"./models/llama/{model_name}-awq")
 
+    def __reinitialize_LLM(self):
+        self.llm = LLM(model=f"./models/{self.model_name}",
+            quantization = "gptq_marlin",
+            download_dir = HF_CACHE_DIR,
+            max_model_len = 2048 * 4,
+            gpu_memory_utilization=0.95,
+            tensor_parallel_size=torch.cuda.device_count())
+
+
     def __extract_json_text_by_key(self, raw_text, target_key):
         """
         Searches raw text for a JSON object that contains a specific key
@@ -154,13 +165,13 @@ class QueryGenerator:
 
     # utility LLM functions
 
-    def __get_prompt_token(self, prompt_text):
+    def __get_prompt_token(self, prompt_text, system_prompt_text):
         
         tokenizer = AutoTokenizer.from_pretrained(f"./models/{self.model_name}")
         tokenizer.lang = "en"
 
         messages = [
-            {"role": "system", "content": "You are a helpful assistant that extracts factoids from text."},
+            {"role": "system", "content": system_prompt_text},
             {"role": "user", "content": prompt_text}
         ]
         prompt = tokenizer.apply_chat_template(
@@ -204,18 +215,6 @@ class QueryGenerator:
 
     
     def __execute_LLM_tasks(self, prompts, max_new_tokens, temperature = 0.3, top_p = 0.9):
-        #tokenizer = AutoTokenizer.from_pretrained(self.model_name, cache_dir = os.environ['HF_HOME'])
-        #tokenizer = AutoTokenizer.from_pretrained(f"./models/{self.model_name}")
-        #tokenizer.lang = "en"
-        #messages = [
-            #{"role": "system", "content": "You are Qwen, created by Alibaba Cloud. You are a helpful assistant that given a task returns a response following the exact structured output format specified in the prompt. Respond only in English"},
-            #{"role": "user", "content": prompt}
-        #]
-        #text = tokenizer.apply_chat_template(
-            #messages,
-            #tokenize=False,
-            #add_generation_prompt=True
-        #)
         sampling_params = SamplingParams(
             max_tokens=max_new_tokens,
             temperature=temperature,
@@ -233,11 +232,42 @@ class QueryGenerator:
         #return outputs[0].outputs[0].text if outputs else ""
         return outputs
     
+    def __cleanup_LLM_response(self, llm_response):
+        cleanup_instruction = """
+        ### Task:
+        Given a raw LLM response, your task is to extract a coherent JSON object after fixing typos, grammatical mistakes, json formatting errors, etc.
+        The LLM response provided in the input, is the raw response from an LLM tasked with return a json array with the structure "groundings": ["factoid 1", "factoid 2"].
+        The LLM response is riddled with json formatting errors, chinese characters, typos, grammatical mistakes, etc. Your task is to understand the LLM response and extract
+        the required JSON object from the raw response. The response may not strictly have a properly defined JSON object, but erroneous JSON object (for example, missing array closing brackets).
+
+        ### Guidelines:
+        - Extract the JSON object from the raw response. Refer to output format given below, for the JSON object to be returned.
+        - **Do not** add more thinking steps or reasoning steps in the response.
+        - Return a clean JSON object, with grammatical mistakes, typos and formatting errors from the input, fixed.
+        - All responses should only be in English. Translate chinese text in the final response.
+        - If a clean JSON object doesn't exist, return "None"
+
+        ### Input Format:
+        Text - <LLM response text>
+
+        ### Output Format (JSON):
+        "groundings": [<list of meaningful, grammatically correct sentences>]
+
+        ### Input for your task
+        """
+
+        cleanup_instruction = cleanup_instruction + f"\nText: {llm_response}"
+        cleanup_system_prompt = "You are a helpful assistant, that given a text returns a cleaned, structured JSON object if it exists"
+        cleanup_instruction_prompt_token = [self.__get_prompt_token(cleanup_instruction, cleanup_system_prompt)]
+        outputs = self.__execute_LLM_tasks(cleanup_instruction_prompt_token, max_new_tokens = 8192, temperature = 0.1, top_p = 0.9)
+        print('groundings cleanup response', outputs[0].outputs[0].text.strip())
+        return []
+    
     def __cleanup_sentence(self, sentences):
         cleanup_instruction = """
         ### Task:
-        Given a sentence, riddled with grammatical, punctuation, insensible/gibberish words or typos (missing spaces), remove
-        the errors and return a clean, grammatically correct and meaningful sentence if it exists. If a meaningful sentence doesn't exist,
+        Given a text, riddled with grammatical, punctuation, insensible/gibberish words or typos (missing spaces), remove
+        the errors and return a clean, grammatically correct and meaningful text if it exists. If a text doesn't exist,
         return a blank string "". If there are no errors in the text, return it as is.
 
         ### Cleanup Rules:
@@ -245,9 +275,9 @@ class QueryGenerator:
         - Return a grammatically correct and meaningful sentence. If it doesn't exist, return "".
         - Remove chinese characters.
         - If the sentence contains gibberish, insensible words return "".
-        - **Do not** make a completely new sentence.
         - **Do not** hallucinate completely new words in the sentence.
         - **Do not** put chinese words in the sentence.
+        - If the text is already meaningful and sensible, return it as is.
 
         ### Input format:
         Text: <text>
@@ -269,13 +299,16 @@ class QueryGenerator:
 
         ### Example Input:
         Text: "Apple works with suppliers to transition to clean energy and energy-efficient production methods."
+
+        ### Example Output:
         Cleaned Text: "Apple works with suppliers to transition to clean energy and energy-efficient production methods."
 
         ### Input for your task:
         """
         cleaned_sentences = []
         cleanup_instructions = [cleanup_instruction + f"\nText: \"{sentence}\"" for sentence in sentences]
-        cleanup_instruction_prompt_tokens = [self.__get_prompt_token(prompt) for prompt in cleanup_instructions]
+        cleanup_system_prompt = "You are a helpful assistant, that given a text returns a cleaned, grammatically meaningful sentence if it exists."
+        cleanup_instruction_prompt_tokens = [self.__get_prompt_token(prompt, cleanup_system_prompt) for prompt in cleanup_instructions]
         coutputs = self.__execute_LLM_tasks(prompts=cleanup_instruction_prompt_tokens, max_new_tokens=2000, temperature=0.1, top_p=0.9)
         for o in coutputs:
             osummary = o.outputs[0].text.strip()
@@ -295,21 +328,20 @@ class QueryGenerator:
 
     def __generate_grounding_reasoning_pair(self, fact_doc_text, metadata, qna_dict, no_of_trials = 10):
         grounding_instruction_prompt = """
-        ### Task:
-        Analyze the provided question and answer pair, set of factoids and the metadata about the facts, generate groundings for the question and answer pair.
+        Analyze the provided question and answer pair, set of factoids and the metadata about the factoids, and generate groundings for the question and answer pair.
         Groundings are factoids that support the answer to the question. The factoids don't have to directly support the answer but should help indirectly answering the
         provided question.
 
         ### Generation Rules
+        - **Do not put gibberish, unnecessary, ellaborate adjectives and chinese characters** in your response for either question or the answer.
+        - **Do not put opinions, your intermediate reasoning steps used in forming the response**.
         - The groundings should be factoids picked directly from the provided factoids in the input prompt.
         - **Do not** generate new factoids to put in the groundings to support the answer.
-        - Use the example structure as reference to return the final response.
+        - **Do not** put incorrect punctuations in the factoids.
+        - Use the example structure as reference to return the final response. **Do not copy example from the prompt** in your response.
         - Return clean groundings with no typos, grammatical mistakes or erronuous punctuations.
-        - **Do not use chinese characters** in your response.
-        - Phrase your response as concisely as possible.
-        - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response for either question or the answer.
-        - **Do not copy example from the prompt** in your response.
-        - **Don't think** for more than 4000 tokens
+        - Phrase your response as concisely as possible, in English only.
+        - **Don't think** for more than 2000 tokens
 
         ### Input format:
         Question: <question text>
@@ -413,8 +445,9 @@ class QueryGenerator:
         ### Input for your task:
         """
         grounding_instruction_prompts = [grounding_instruction_prompt + f"\nQuestion: {qna_dict['query']}\nAnswer: {qna_dict['answer']}\nMetadata: {metadata}\nFactoids: {fact_doc_text}" for _ in range(no_of_trials)]
-        grounding_instruction_prompt_tokens = [self.__get_prompt_token(prompt) for prompt in grounding_instruction_prompts]
-        goutputs = self.__execute_LLM_tasks(grounding_instruction_prompt_tokens, max_new_tokens=8192, temperature=0.1, top_p=0.9)
+        grounding_system_prompt = "You are a helpful AI assistant, that given a question-answer pair and list of factoids, generates groundings for the answer (factoids that support the answer)"
+        grounding_instruction_prompt_tokens = [self.__get_prompt_token(prompt, grounding_system_prompt) for prompt in grounding_instruction_prompts]
+        goutputs = self.__execute_LLM_tasks(grounding_instruction_prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
 
         #summary, gmessages = self.__execute_LLM_task(grounding_instruction_prompt, max_new_tokens=8192, temperature=0.1, top_p = 0.9, return_prompt_messages = True)
         
@@ -424,19 +457,24 @@ class QueryGenerator:
         best_groundings = []
         for o in goutputs:
             gsummary = o.outputs[0].text.strip()
+            print('grounding response', gsummary)
+            groundings_json_arr = self.__cleanup_LLM_response(gsummary)
             groundings_json_arr = self.__extract_json_array_by_key(gsummary, "groundings")
+            '''
             cleaned_groundings = self.__clean_json_array(groundings_json_arr)
             cleaned_groundings = [s for s in cleaned_groundings if s != ""]
             print('cleaned groundings: ', cleaned_groundings)
             ml = max(ml, len(cleaned_groundings))
             grounding_jsons.append(cleaned_groundings)
+            '''
         
         print('extracted json', groundings_json_arr)
         best_groundings = [gs for gs in grounding_jsons if len(gs) == ml]
         best_grounding_strs = ["[" + ",\n".join(f"{item}" for item in cg) + "]" for cg in best_groundings]
         reasoning_instruction_prompts = [reasoning_instruction_prompt + f"\nQuestion: {qna_dict['query']}\nAnswer: {qna_dict['answer']}\nMetadata: {metadata}\nGroundings: {grounding_str}" for grounding_str in best_grounding_strs]
-        reasoning_instruction_prompt_tokens = [self.__get_prompt_token(prompt) for prompt in reasoning_instruction_prompts]
-        routputs = self.__execute_LLM_tasks(reasoning_instruction_prompt_tokens, max_new_tokens = 8192, temperature = 0.1, top_p = 0.9)
+        reasoning_system_prompt = "You are a helpful AI assistant, that given a question-answer pair, groundings, provides reasonings for every grounding explaining how/why it supports the answer."
+        reasoning_instruction_prompt_tokens = [self.__get_prompt_token(prompt, reasoning_system_prompt) for prompt in reasoning_instruction_prompts]
+        routputs = self.__execute_LLM_tasks(reasoning_instruction_prompt_tokens, max_new_tokens = 8192, temperature = 0.6, top_p = 0.9)
 
         # return only valid and the best reasoning-groundings pair
         ml = -1
@@ -481,6 +519,7 @@ class QueryGenerator:
         - **Do not use chinese characters** in your response for reasoning.
         - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response for reasoning.
         - **Do not copy example from the prompt** in your response.
+        - **Do not put intermediate, thinking or reasonings steps in your response**
 
         ### Input format:
         **Question:** <question text>
@@ -524,12 +563,11 @@ class QueryGenerator:
         Given the list of factoids below and metadata, generate a complex question that requires reasoning over multiple factoids
 
         ### Generation Rules
-        - **Do not use chinese characters** in your response.
-        - Keep the generated query under 100 tokens.
+        - **Do not use chinese characters** in your response. Return responses in English only.
+        - Keep the generated query under 100 words.
         - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response for either question or the answer.
-        - End the response with `###EOF###`.
+        - **Do not put intermediate, thinking or reasonings steps in your response**
         - Don't think for more than 2000 tokens
-        - Label your chain of thoughts or reasoning as ### COT ### and final response as ### FINAL RESPONSE ###
         - Use the example structure to return the final response.
         - **Do not copy example from the prompt** in your response.
 
@@ -560,9 +598,10 @@ class QueryGenerator:
         Given the list of factoids below, metadata, and a query, summarize and return an answer to the query using the given factoids.
 
         ### Answer Generation Rules
+        - **No opinions, adjectives, elaborations or extra details**
         - Generated answer is ONLY from the given factoids, **do not** hallucinate new information or factoids to answer the query.
         - Return the final answer as one single concise paragraph in a json object. Use the example output as reference for structure.
-        - **Do not put chinese characters** in your response.
+        - **Do not put chinese characters** in your response. Return responses only in English.
         - Keep the generated answer concise and under 200 words.
         - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response.
         - **Do not** put your chain of thought or reasoning steps in the response. Return **just the answer** in your final response.
@@ -598,8 +637,9 @@ class QueryGenerator:
         """
 
         qstn_instruction_prompt = qstn_instruction_prompt + f"\nMetadata: {metadata}\nFactoids: {fact_doc_text}"
-        qstn_prompt_tokens = [self.__get_prompt_token(qstn_instruction_prompt) for _ in range(no_of_trials)]
-        qoutputs = self.__execute_LLM_tasks(qstn_prompt_tokens, max_new_tokens=3000, temperature=0.2, top_p=0.9)
+        qstn_system_prompt = "You are a helpful assistant, that given a list of factoids, generates meaningful and complex questions from it."
+        qstn_prompt_tokens = [self.__get_prompt_token(qstn_instruction_prompt, qstn_system_prompt) for _ in range(no_of_trials)]
+        qoutputs = self.__execute_LLM_tasks(qstn_prompt_tokens, max_new_tokens=3000, temperature=0.6, top_p=0.9)
 
         #summary, qmessages = self.__execute_LLM_task_chain(qstn_instruction_prompt, max_new_tokens=3000, temperature=0.2, top_p = 0.9, return_prompt_messages = True)
         #print('Generated Response:\n', summary)
@@ -616,21 +656,25 @@ class QueryGenerator:
                     print('Generated query: ', query_str)
                     if self.__is_valid_sentence(query_str):
                         query_strs.append(query_str)
+        print('no of valid questions', len(query_strs))
+        ## Answer generation
+        self.__reinitialize_LLM()
         answer_instruction_prompts = [answer_instruction_prompt + f"\nMetadata: {metadata}\nFactoids: {fact_doc_text}\nQuery: {q}" for q in query_strs]
-        answer_prompt_tokens = [self.__get_prompt_token(prompt_text=prompt) for prompt in answer_instruction_prompts]
-        aoutputs = self.__execute_LLM_tasks(answer_prompt_tokens, max_new_tokens=4096, temperature=0.2, top_p = 0.9)
+        ans_system_prompt = "You are a helpful assistant, that given a list of factoids and a query, generates meaningful answer to the question based on the factoids."
+        answer_prompt_tokens = [self.__get_prompt_token(prompt_text=prompt, system_prompt_text=ans_system_prompt) for prompt in answer_instruction_prompts]
+        aoutputs = self.__execute_LLM_tasks(answer_prompt_tokens, max_new_tokens=4096, temperature=0.6, top_p = 0.9)
         for query_str,o in zip(query_strs, aoutputs):
             ans_summary = o.outputs[0].text.strip()
             print('Generated answer response:\n', ans_summary)
             answer_json = self.__extract_json_text_by_key(ans_summary, "answer")
-            if answer_json != None:
+            if answer_json != None and self.__is_valid_sentence(answer_json["answer"]):
                 qna_pair = {
                     'query': query_str,
                     'answer': answer_json["answer"]
                 }
                 qna_pairs.append(qna_pair)
         ans_strs = [qob['answer'] for qob in qna_pairs]
-        cleaned_answers = self.__cleanup_sentence(ans_strs)
+        cleaned_answers = ans_strs #self.__cleanup_sentence(ans_strs)
         cleaned_qna_pairs = []
         for ci,cleaned_ans in enumerate(cleaned_answers):
             if cleaned_ans != "":
@@ -678,16 +722,17 @@ class QueryGenerator:
             print('\nStarting query generation for batch of factoids\n')
             for i in range(0, len(filtered_factoids), MAX_FACTOIDS_TO_SAMPLE):
                 factoid_subarr = filtered_factoids[i:i+MAX_FACTOIDS_TO_SAMPLE]
-                if len(factoid_subarr) >= 15:
-                    factoid_str = "[" + ",\n".join(f"{item['factoid']}" for item in factoid_subarr) + "]"
-                    print(f'\nRunning {no_of_trials} qna generation for factoids batch {i}')
-                    qna_pairs = self.__generate_query_answer_pair(factoid_str, metadata, no_of_trials)
-                    print('No of valid qna pairs: ', len(qna_pairs))
-                    for qna_pair in qna_pairs:
-                        query_dict = self.__generate_grounding_reasoning_pair(factoid_str, metadata, qna_pair, no_of_trials)
-                        if query_dict != None and "reasonings" in query_dict and "groundings" in query_dict:
-                            query_dict = query_dict | qna_pair
-                            all_resp.append(query_dict)
+                if len(factoid_subarr) < MIN_FACTOIDS_NEEDED_FOR_GENERATION:
+                    factoid_subarr = filtered_factoids
+                factoid_str = "[" + ",\n".join(f"{item['factoid']}" for item in factoid_subarr) + "]"
+                print(f'\nRunning {no_of_trials} qna generation for factoids batch {i}')
+                qna_pairs = self.__generate_query_answer_pair(factoid_str, metadata, no_of_trials)
+                print('No of valid qna pairs: ', len(qna_pairs))
+                for qna_pair in qna_pairs:
+                    query_dict = self.__generate_grounding_reasoning_pair(factoid_str, metadata, qna_pair, no_of_trials)
+                    if query_dict != None and "reasonings" in query_dict and "groundings" in query_dict:
+                        query_dict = query_dict | qna_pair
+                        all_resp.append(query_dict)
                         
             print('No of valid whole set: ', len(all_resp))
             query_json_path = f'./data/queries/{self.model_folder}/{self.filename}_gen_queries.json'
