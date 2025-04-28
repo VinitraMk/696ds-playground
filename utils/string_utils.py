@@ -38,6 +38,42 @@ def extract_json_array_by_key(raw_text, target_key):
             return None
     return None
 
+def extract_json_object_array_by_keys(text, required_keys):
+    """
+    Extracts a JSON array of objects containing the specified two keys from a text block.
+    
+    Args:
+        text (str): LLM response text that may contain a JSON array.
+        required_keys (list or tuple): Two keys expected in each object (e.g., ["factoid", "citation"]).
+    
+    Returns:
+        list: A list of matching dictionaries or an empty list if not found or invalid.
+    """
+    if len(required_keys) != 2:
+        raise ValueError("Exactly two keys must be specified.")
+
+    try:
+        # Match JSON array in the text
+        json_match = re.search(r'\[\s*{.*?}\s*\]', text, re.DOTALL)
+        if not json_match:
+            return []
+
+        json_str = json_match.group(0)
+        data = json.loads(json_str)
+
+        # Validate structure: list of dicts with required keys
+        if isinstance(data, list) and all(
+            isinstance(item, dict) and all(k in item for k in required_keys)
+            for item in data
+        ):
+            return data
+        else:
+            return []
+
+    except Exception as e:
+        print(f"Error parsing JSON: {e}")
+        return []
+
 def is_valid_sentence(sentence, word_count_limit = 100):
 
     sentence = sentence.strip()

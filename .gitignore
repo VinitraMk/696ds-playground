@@ -4,3 +4,6 @@
 /logs
 /models
 /intermediate_data
+config.json
+*.pyc
+**/__pycache__/

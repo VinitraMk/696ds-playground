@@ -7,9 +7,11 @@ import json
 from time import time
 import sys
 import argparse
+import gc
+from google import genai
 
 from utils.string_utils import extract_json_array_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks
+from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task
 
 COMPANY_DICT = {
     'INTC': 'Intel Corp.',
@@ -29,7 +31,8 @@ MODELS = [
     "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4",
     "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int8",
     "Qwen/QwQ-32B-AWQ",
-    "meta-llama/Meta-Llama-3-70B"
+    "meta-llama/Meta-Llama-3-70B",
+    "gemini-2.0-flash"
 ]
 
 SEED_METADATA_TOPICS = [
@@ -54,6 +57,9 @@ class ReasoningsGenerator:
         self.filename = filename
         self.company_name = COMPANY_DICT[filename.split('_')[1]]
         self.model_name = MODELS[model_index]
+        with open("./config.json", "r") as fp:
+            cfg = json.load(fp)
+
         if "QwQ" in self.model_name:
             self.llm = LLM(model=f"./models/{self.model_name}",
                     quantization = "awq",
@@ -61,6 +67,7 @@ class ReasoningsGenerator:
                     max_model_len = 2048 * 4,
                     #gpu_memory_utilization=0.95,
                     tensor_parallel_size=torch.cuda.device_count())
+            self.model_folder = "qwq"
         elif "Qwen2.5" in self.model_name:
             self.llm = LLM(model=f"./models/{self.model_name}",
                 quantization = "gptq_marlin",
@@ -68,6 +75,12 @@ class ReasoningsGenerator:
                 max_model_len = 2048 * 4,
                 gpu_memory_utilization=0.95,
                 tensor_parallel_size=torch.cuda.device_count())
+            self.model_folder = "qwq"
+        elif "gemini" in self.model_name:
+            self.llm = genai.Client(
+                api_key = cfg["google_api_keys"]["vinitramk1"]
+            )
+            self.model_folder = "gemini"
         elif "Llama" in self.model_name:
             #mf = self.model_name.split("/")[1]
             self.__quantize_llama(self.model_name)
@@ -77,35 +90,34 @@ class ReasoningsGenerator:
                 download_dir = f'./models/llama/{self.model_name}-awq',
                 tensor_parallel_size=torch.cuda.device_count())
             self.model_folder = "llama"
-        self.model_folder = "qwq"
+        else:
+            raise ValueError('Invalid model index passed!')
 
     def __generate_reasonings(self, qnag_coll, metadata):
 
         reasoning_instruction_prompt = """
         ### Task:
-        Analyze the provided question and answer pair, set of factoids and the metadata about the factoids, and generate groundings for the question and answer pair.
-        Groundings are factoids that support the answer to the question. The factoids don't have to directly support the answer but should help indirectly answering the
-        provided question.
+        Analyze the provided question and answer pair, set of groundings and the metadata, and generate reasonings for the groundings of the given Q&A pair.
+        Reasonings are explainings of why the groundings (citations from original document) support the answer.
 
         ### Generation Rules
         - **Do not put gibberish, unnecessary, ellaborate adjectives and chinese characters** in your response for either question or the answer.
         - **Do not put opinions, your intermediate reasoning steps used in forming the response**.
-        - The groundings should be factoids picked directly from the provided factoids in the input prompt.
+        - Every reasoning generated should be concise and under 100 words and in English only.
         - **Do not** generate new factoids to put in the groundings to support the answer.
         - **Do not** put incorrect punctuations in the factoids.
         - Use the example structure as reference to return the final response. **Do not copy example from the prompt** in your response.
-        - Return clean groundings with no typos, grammatical mistakes or erronuous punctuations.
-        - Phrase your response as concisely as possible, in English only.
+        - Return clean reasonings with no typos, grammatical mistakes or erronuous punctuations.
         - **Don't think** for more than 2000 tokens
 
         ### Input format:
         Question: <question text>
         Answer: <answer text>
         Metadata: <meta data of the main company upon which the factoids are based.>
-        Factoids: [\<list of factoids\>]
+        Groundings: [\<list of factoids\>]
 
         ### Output format:
-        "groundings": [\<list of factoids picked supporting the answer\>]
+        "reasonings": [\<list of factoids picked supporting the answer\>]
 
         ### Example Input:
         Question: How does Apple’s commitment to achieving carbon neutrality across its supply chain and products by 2030, as discussed in its 10-K, affect its cost structure, supplier relationships, and long-term profitability, and what are the potential risks and rewards associated with this aggressive ESG strategy?
@@ -138,32 +150,48 @@ class ReasoningsGenerator:
         """
 
         reasoning_instruction_prompts = [reasoning_instruction_prompt + f"\nQuery: {qo['query']}\nAnswer: {qo['answer']}\nMetadata: {metadata}\nGroundings: {qo['groundings']}" for qo in qnag_coll]
-        reasoning_system_prompt = "You are a helpful assistant that given a Q&A pair and groundings, returns reasonings (explanation of why every grounding supports the answer)."
-        reasoning_prompt_tokens = [get_prompt_token(rip, reasoning_system_prompt, self.model_name) for rip in reasoning_instruction_prompts]
-        routputs = execute_LLM_tasks(self.llm, reasoning_prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
-
         query_sets = []
         missed_sets = []
-        print('len of outputs', len(routputs))
-        #print('gop', goutputs)
-        #print('gop 0', goutputs[0])
-        for zqf, o in zip(qnag_coll, routputs):
-            rsummary = o.outputs[0].text.strip()
-            print(f'generated response for question: ', rsummary)
-            rjson_arr = extract_json_array_by_key(rsummary, "reasonings")
-            if rjson_arr != None and len(rjson_arr) > 0:
-                query_sets.append({
-                    "query": zqf["query"],
-                    "answer": zqf["answer"],
-                    "reasonings": rjson_arr,
-                    "groundings": zqf["groundings"]
-                })
-            else:
-                missed_sets.append({
-                    "query": zqf["query"],
-                    "answer": zqf["answer"],
-                    "groundings": zqf["groundings"]
-                })
+        if "gemini" in self.model_name:
+            for ri, reasoning_instruction_prompt in enumerate(reasoning_instruction_prompts):
+                rsummary = execute_gemini_LLM_task(self.llm, reasoning_instruction_prompt)
+                print(f'generated response for question: ', rsummary)
+                rjson_arr = extract_json_array_by_key(rsummary, "reasonings")
+                if rjson_arr != None and len(rjson_arr) > 0:
+                    query_sets.append({
+                        "query": qnag_coll[ri]["query"],
+                        "answer": qnag_coll[ri]["answer"],
+                        "reasonings": rjson_arr,
+                        "groundings": qnag_coll[ri]["groundings"]
+                    })
+                else:
+                    missed_sets.append({
+                        "query": qnag_coll[ri]["query"],
+                        "answer": qnag_coll[ri]["answer"],
+                        "groundings": qnag_coll[ri]["groundings"]
+                    })
+        else:
+            reasoning_system_prompt = "You are a helpful assistant that given a Q&A pair and groundings, returns reasonings (explanation of why every grounding supports the answer)."
+            reasoning_prompt_tokens = [get_prompt_token(rip, reasoning_system_prompt, self.model_name) for rip in reasoning_instruction_prompts]
+            routputs = execute_LLM_tasks(self.llm, reasoning_prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
+
+            for zqf, o in zip(qnag_coll, routputs):
+                rsummary = o.outputs[0].text.strip()
+                print(f'generated response for question: ', rsummary)
+                rjson_arr = extract_json_array_by_key(rsummary, "reasonings")
+                if rjson_arr != None and len(rjson_arr) > 0:
+                    query_sets.append({
+                        "query": zqf["query"],
+                        "answer": zqf["answer"],
+                        "reasonings": rjson_arr,
+                        "groundings": zqf["groundings"]
+                    })
+                else:
+                    missed_sets.append({
+                        "query": zqf["query"],
+                        "answer": zqf["answer"],
+                        "groundings": zqf["groundings"]
+                    })
 
         print('no of valid query sets', len(query_sets))
         print('no of invalid query sets', len(missed_sets))
@@ -225,10 +253,16 @@ class ReasoningsGenerator:
                     queries["queries"].append(topic_queries)
 
                 with open(main_query_store_fp, 'w') as fp:
-                    json.dump(queries, fp) 
+                    json.dump(queries, fp)
+        
         else:
             print('Chunk store not found!')
             SystemExit()
+
+    def destroy(self):
+        del self.llm
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
@@ -239,7 +273,7 @@ if __name__ == "__main__":
     old_stdout = sys.stdout
     sys.stdout = log_file
 
-    multiprocessing.set_start_method("spawn")  # Fixes CUDA issue with multiprocessing
+    #multiprocessing.set_start_method("spawn")  # Fixes CUDA issue with multiprocessing
     torch.cuda.init()
 
     parser = argparse.ArgumentParser()
@@ -249,19 +283,23 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    query_gen = ReasoningsGenerator(filename = args.filename, model_index = args.model_index)
+    reason_gen = ReasoningsGenerator(filename = args.filename, model_index = args.model_index)
 
     if args.topic_index == -1:
         for ti in range(len(SEED_METADATA_TOPICS)):
             print(f'Generating reasonings for QNA and grounding pair on topic: {SEED_METADATA_TOPICS[ti]}')
-            query_gen.generate_reasonings(topic_index = ti)
+            reason_gen.generate_reasonings(topic_index = ti)
             print(f'Finished generating reasonings for topic {SEED_METADATA_TOPICS[ti]}')
     else:
         print(f'Generating reasonings for QNA and grounding pair on topic: {SEED_METADATA_TOPICS[args.topic_index]}')
-        query_gen.generate_reasonings(topic_index = args.topic_index)
+        reason_gen.generate_reasonings(topic_index = args.topic_index)
         print(f'Finished generating reasonings for topic {SEED_METADATA_TOPICS[args.topic_index]}')
 
-    
+    #reason_gen.destroy()
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout
     log_file.close()
+
+    # remove intermediate data file
+    if os.path.exists(f'intermediate_data/query_sets/{reason_gen.model_folder}/{args.filename}_gen_queries.json'):
+        os.remove(f'intermediate_data/query_sets/{reason_gen.model_folder}/{args.filename}_gen_queries.json')

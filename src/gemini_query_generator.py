@@ -8,9 +8,6 @@ import sys
 import json
 import re
 
-#API_KEY1 = "AIzaSyDjjGKGfr5-wOH7aCG7p8U6kvvR0yVp_14"
-API_KEY = "AIzaSyALRwfCf7GEnX7XlLRfEPZ6VfCwQdEaC3M"
-
 COMPANY_DICT = {
     'INTC': 'Intel Corp.',
     'AMD': 'AMD Inc.',
@@ -38,11 +35,12 @@ MIN_FACTOIDS_NEEDED_FOR_GENERATION = 15
 class GeminiQueryGenerator:
 
     def __init__(self, filename, model_index = 0, topic_index = 0):
+        with open('./config.json', 'r') as fp:
+            cfg = json.load(fp)
         self.filename = filename
         self.topic_index = topic_index
         self.company_abbr = COMPANY_DICT[filename.split('_')[1]]
-        self.client = genai.Client(api_key=API_KEY)
-
+        self.client = genai.Client(api_key=cfg["google_api_keys"]["vinitramk2"])
 
     def __execute_LLM_task(self, instruction_prompt):
         response = self.client.models.generate_content(

@@ -9,7 +9,7 @@ import argparse
 import multiprocessing
 import re
 import ast
-from utils.string_utils import extract_json_array_by_key, is_valid_sentence
+from utils.string_utils import extract_json_object_array_by_keys, is_valid_sentence
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks
 
 COMPANY_DICT = {
@@ -67,7 +67,7 @@ class FactoidGen:
         print('Model used: ', self.model_name)
 
         if self.model_name.startswith("Qwen"):
-            self.llm = LLM(model=f"./models/{self.model_name}",
+            self.llm = LLM(model=f"models/{self.model_name}",
                 quantization = "gptq_marlin",
                 download_dir = HF_CACHE_DIR,
                 max_model_len = 4096,
@@ -78,34 +78,21 @@ class FactoidGen:
             print('Invalid model name passed!')
             SystemExit()
 
-    def __extract_factoid_list(self, raw_text):
-        pattern = r'"factoids"\s*:\s*\[(?:\s*"[^"]*"\s*,?\s*)+\]'
-
-        match = re.search(pattern, raw_text, re.DOTALL)
-        if match:
-            json_fragment = '{' + match.group(0) + '}'
-            try:
-                data = json.loads(json_fragment)
-                return data["factoids"]
-            except json.JSONDecodeError as e:
-                print(f"JSON decode error: {e}")
-                return []
-        return []
-        
 
     def __extract_and_clean_factoids(self, text):
-        factoid_list = self.__extract_factoid_list(text)
+        factoid_list = extract_json_object_array_by_keys(text, ["factoid", "citation"])
         #print('factoid list', factoid_list)
-        clean_factoids = [s for s in factoid_list if is_valid_sentence(s)]
-        return clean_factoids
+        clean_factoids_citations = [s for s in factoid_list if is_valid_sentence(s["factoid"])]
+        return clean_factoids_citations
 
     def __generate_factoids_from_all_chunks(self, chunks, topic):
         instruction_prompt = """
-        Given a text, extract verifiable factoids from it.  A factoid is a discrete, factual statement about the topic, ideally something that could be supported with a citation.
+        Given a text and a topic, extract verifiable factoids from it related to the topic, accompanied by an exact citation.  A factoid is a discrete, factual statement about the topic, ideally something that could be supported with a citation.
 
         ### Generation guidelines:
         - **No opinions, adjectives, elaborations or extra details**
-        - Each factoid must be standalone, verifiable statement
+        - Each factoid must be standalone, verifiable statement.
+        - Each factoid must be accompanied by an exact citation i.e a direct quote or short excerpt from the given text that supports the factoid.
         - Extract any numeric information which is relevant. If there is data in a text based table, extract the relevant data.
         - Use concise, standalone statements, in English.
         - Focus only on information related to the provided topic.
@@ -127,16 +114,13 @@ class FactoidGen:
         Text Chunk:
         "Company X is currently involved in a class action lawsuit filed in March 2023 concerning alleged violations of securities laws. The case is pending in the U.S. District Court for the Southern District of New York. No financial settlement has been reached as of the filing date."
 
-        Output:
-        "factoids": [
-            "Company X is involved in ....,
-            "The lawsuit was filed ...,
-            ...   
-        ]
+        Output (JSON):
+        "factoids": [{
+            "factoid": "Company X is facing a class action lawsuit related to alleged securities law violations.",
+            "citation": "Company X is currently involved in a class action lawsuit filed in March 2023 concerning alleged violations of securities laws."
+        }]
         
         ### Now process the input:
-        Topic: {topic}
-        Text Chunk: \"\"\"{chunk}\"\"\"
         """
 
         all_res = {}
@@ -145,9 +129,9 @@ class FactoidGen:
         for i in range(0, len(chunks), CHUNK_BATCH_SIZE):
             print(f'\nProcessing chunk batch {i}')
             chunk_batch = chunks[i:(i+CHUNK_BATCH_SIZE)]
-            chunk_to_prompts = {f'{chunk["chunk_index"]}': instruction_prompt.format(topic=topic, chunk=chunk["text"]) for chunk in chunk_batch}
-            prompt_tokens = [get_prompt_token(p, factoid_system_prompt, self.llm) for p in chunk_to_prompts.values()]
-            outputs = execute_LLM_tasks(prompt_tokens, max_new_tokens=4096, temperature=0.7, top_p=0.9)
+            chunk_to_prompts = {f'{chunk["chunk_index"]}': instruction_prompt + f"\nTopic: {topic}\nText chunk: {chunk['text']}" for chunk in chunk_batch}
+            prompt_tokens = [get_prompt_token(p, factoid_system_prompt, self.model_name) for p in chunk_to_prompts.values()]
+            outputs = execute_LLM_tasks(self.llm, prompt_tokens, max_new_tokens=4096, temperature=0.7, top_p=0.9)
             res = {}
             for j, o in zip(chunk_to_prompts.keys(), outputs):
                 print(f'generated response for chunk {j}: ', o.outputs[0].text.strip())
@@ -156,6 +140,9 @@ class FactoidGen:
                     res[j] = out
             print('resulting factoids', res, len(res.keys()))
             all_res = all_res | res
+        for i in range(0, len(chunks), CHUNK_BATCH_SIZE):
+            chunk_batch = chunks[i:(i+CHUNK_BATCH_SIZE)]
+
         print('dict len', len(all_res.keys()))
         return all_res
 
@@ -195,7 +182,7 @@ class FactoidGen:
                     existing_factoids = []
                 if SEED_METADATA_TOPICS[topic_index] not in existing_topics:
                     existing_topics.append(SEED_METADATA_TOPICS[topic_index])
-                chunk_facts = [{ 'topic': SEED_METADATA_TOPICS[topic_index], 'factoid': factoid } for factoid in chunk_factoids[f'{i}']]
+                chunk_facts = [{ 'topic': SEED_METADATA_TOPICS[topic_index], 'factoid': factoid_cit['factoid'], 'citation': factoid_cit['citation'] } for factoid_cit in chunk_factoids[f'{i}']]
                 existing_factoids.extend(chunk_facts)
                 chunk_resp = {
                     'chunk_index': i,

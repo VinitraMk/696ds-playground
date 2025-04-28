@@ -7,7 +7,9 @@ from time import time
 import sys
 import argparse
 from utils.string_utils import extract_json_array_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks
+from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task
+import gc
+from google import genai
 
 COMPANY_DICT = {
     'INTC': 'Intel Corp.',
@@ -27,7 +29,8 @@ MODELS = [
     "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4",
     "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int8",
     "Qwen/QwQ-32B-AWQ",
-    "meta-llama/Meta-Llama-3-70B"
+    "meta-llama/Meta-Llama-3-70B",
+    "gemini-2.0-flash"
 ]
 
 SEED_METADATA_TOPICS = [
@@ -52,6 +55,9 @@ class GroundingsGenerator:
         self.filename = filename
         self.company_name = COMPANY_DICT[filename.split('_')[1]]
         self.model_name = MODELS[model_index]
+        with open("./config.json", "r") as fp:
+            cfg = json.load(fp)
+
         if "QwQ" in self.model_name:
             self.llm = LLM(model=f"./models/{self.model_name}",
                     quantization = "awq",
@@ -59,6 +65,7 @@ class GroundingsGenerator:
                     max_model_len = 2048 * 4,
                     #gpu_memory_utilization=0.95,
                     tensor_parallel_size=torch.cuda.device_count())
+            self.model_folder = "qwq"
         elif "Qwen2.5" in self.model_name:
             self.llm = LLM(model=f"./models/{self.model_name}",
                 quantization = "gptq_marlin",
@@ -66,6 +73,12 @@ class GroundingsGenerator:
                 max_model_len = 2048 * 4,
                 gpu_memory_utilization=0.95,
                 tensor_parallel_size=torch.cuda.device_count())
+            self.model_folder = "qwq"
+        elif "gemini" in self.model_name:
+            self.llm = genai.Client(
+                api_key = cfg["google_api_keys"]["vinitramk1"]
+            )
+            self.model_folder = "gemini"
         elif "Llama" in self.model_name:
             #mf = self.model_name.split("/")[1]
             self.__quantize_llama(self.model_name)
@@ -75,20 +88,20 @@ class GroundingsGenerator:
                 download_dir = f'./models/llama/{self.model_name}-awq',
                 tensor_parallel_size=torch.cuda.device_count())
             self.model_folder = "llama"
-        self.model_folder = "qwq"
+        else:
+            raise ValueError('Invalid model index passed!')
 
-    def __generate_groundings(self, fact_doc_texts, factoids_arr_batch, qna_pairs, metadata):
+    def __generate_groundings(self, fact_doc_texts, factoids_arr_batch, query_strs, metadata):
 
         grounding_instruction_prompt = """
         ### Task:
-        Analyze the provided question and answer pair, set of factoids and the metadata about the factoids, and generate groundings for the question and answer pair.
-        Groundings are factoids that support the answer to the question. The factoids don't have to directly support the answer but should help indirectly answering the
-        provided question.
+        Analyze the provided question, set of factoids with their citations and the metadata about them, and generate groundings for the question and answer pair.
+        Groundings are citations of the factoids that support or are relevant to the question.
 
         ### Generation Rules
         - **Do not put gibberish, unnecessary, ellaborate adjectives and chinese characters** in your response for either question or the answer.
         - **Do not put opinions, your intermediate reasoning steps used in forming the response**.
-        - The groundings should be factoids picked directly from the provided factoids in the input prompt.
+        - The groundings should be citations picked directly from the provided citations in the input prompt.
         - **Do not** generate new factoids to put in the groundings to support the answer.
         - **Do not** put incorrect punctuations in the factoids.
         - Use the example structure as reference to return the final response. **Do not copy example from the prompt** in your response.
@@ -100,35 +113,10 @@ class GroundingsGenerator:
         Question: <question text>
         Answer: <answer text>
         Metadata: <meta data of the main company upon which the factoids are based.>
-        Factoids: [\<list of factoids\>]
+        Factoids: [\<list of factoids with citations\>]
 
         ### Output format:
-        "groundings": [\<list of factoids picked supporting the answer\>]
-
-        ### Example Input:
-        Question: How does Apple’s commitment to achieving carbon neutrality across its supply chain and products by 2030, as discussed in its 10-K, affect its cost structure, supplier relationships, and long-term profitability, and what are the potential risks and rewards associated with this aggressive ESG strategy?
-        Answer: Apple’s environmental initiatives have a significant impact on its cost structure, supplier relationships, and long-term profitability. Upfront costs have risen due to investments in renewable energy, low-carbon manufacturing, and sustainable materials. However, the shift to clean energy and more energy-efficient processes may reduce operational costs over time. Additionally, integrating recycled and sustainable materials into product development increases design complexity and processing requirements, thereby raising costs.
-        Metdata: Company: Apple | SEC-filing: 10-K | Related Topic: Risk Factors and Challenges
-        Factoids: [
-            "Apple has committed to achieving carbon neutrality across its entire business, including the supply chain and product life cycle, by 2030.",
-            "The company has made significant investments in renewable energy and low-carbon manufacturing technologies.",
-            "Apple requires its suppliers to adhere to strict environmental standards, including reducing carbon emissions and using renewable electricity.",
-            "Apple’s Supplier Clean Energy Program has contributed to its goal of reducing emissions across the supply chain.",
-            "The company reports that its use of recycled and sustainable materials in products is increasing year-over-year.",
-            "Apple continues to invest in energy-efficient technologies that improve operational efficiency across its facilities.",
-            "The company discusses potential risks in its 10-K filings related to environmental regulation and climate change, including potential costs from future carbon taxes.",
-            "Apple acknowledges short-term cost increases related to sustainability efforts but positions them as long-term strategic investments.",
-            "The company’s ESG initiatives are framed as important for protecting brand value and aligning with consumer expectations.",
-            "Environmental sustainability is identified as a strategic area for long-term growth and innovation in Apple’s regulatory and investor communications.",
-            "Apple’s financial risk disclosures related to foreign exchange fluctuations in emerging markets.",
-            "Details on litigation or legal contingencies unrelated to environmental policies.",
-            "Statements about Apple’s R&D expenditures for chip architecture and performance optimization.",
-            "Inventory management practices tied to consumer demand and holiday cycles.",
-            "Tax strategies related to international operations and intellectual property.",
-            "Descriptions of supply chain risks unrelated to ESG, such as natural disasters or geopolitical tension.",
-            "Information about share repurchase programs or dividend policies.",
-            "Macroeconomic risks including inflation or interest rate sensitivity."
-        ]
+        "groundings": [\<list of citations of factoids, that support the answer\>]
 
         ### Example Output (JSON):
         "groundings": [
@@ -145,32 +133,47 @@ class GroundingsGenerator:
         ### Input for your task:
         """
 
-        zipped_qna_factoids = list(zip(qna_pairs, fact_doc_texts))
-        grounding_instruction_prompts = [grounding_instruction_prompt + f"\nQuery: {qo[0]['query']}\nAnswer: {qo[0]['answer']}\nMetadata: {metadata}\nFactoids: {qo[1]}" for qo in zipped_qna_factoids]
-        grounding_system_prompt = "You are a helpful assistant that given a Q&A pair and factoids, returns groundings (factoids supporting the answer)."
-        grounding_prompt_tokens = [get_prompt_token(gip, grounding_system_prompt, self.model_name) for gip in grounding_instruction_prompts]
-        goutputs = execute_LLM_tasks(self.llm, grounding_prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
-
+        zipped_query_factoids = list(zip(query_strs, fact_doc_texts))
+        grounding_instruction_prompts = [grounding_instruction_prompt + f"\nQuery: {qo[0]}\nMetadata: {metadata}\nFactoids: {qo[1]}" for qo in zipped_query_factoids]
         qna_pairs_gen = []
         missed_qna_pairs = []
-        zipped_qsnts_factoids = list(zip(qna_pairs, factoids_arr_batch))
-        for zqf, o in zip(zipped_qsnts_factoids, goutputs):
-            gsummary = o.outputs[0].text.strip()
-            print(f'generated response for question: ', gsummary)
-            gjson_arr = extract_json_array_by_key(gsummary, "groundings")
-            if gjson_arr != None and len(gjson_arr) > 0:
-                qna_pairs_gen.append({
-                    "query": zqf[0]["query"],
-                    "answer": zqf[0]["answer"],
-                    "factoids": zqf[1],
-                    "groundings": gjson_arr
-                })
-            else:
-                missed_qna_pairs.append({
-                    "query": zqf[0]["query"],
-                    "answer": zqf[0]["answer"],
-                    "factoids": zqf[1],
-                })
+        zipped_query_factoids = list(zip(query_strs, factoids_arr_batch))
+        if "gemini" in self.model_name:
+            for gi, grounding_instruction_prompt in enumerate(grounding_instruction_prompts):
+                gsummary = execute_gemini_LLM_task(self.llm, grounding_instruction_prompt)
+                print(f'generated response for question: ', gsummary)
+                gjson_arr = extract_json_array_by_key(gsummary, "groundings")
+                if gjson_arr != None and len(gjson_arr) > 0:
+                    qna_pairs_gen.append({
+                        "query": zipped_query_factoids[gi][0],
+                        "factoids": zipped_query_factoids[gi][1],
+                        "groundings": gjson_arr
+                    })
+                else:
+                    missed_qna_pairs.append({
+                        "query": zipped_query_factoids[gi][0],
+                        "factoids": zipped_query_factoids[gi][1],
+                    })
+        else:
+            grounding_system_prompt = "You are a helpful assistant that given a question and set of factoids & citations, returns groundings (citations supporting the answer)."
+            grounding_prompt_tokens = [get_prompt_token(gip, grounding_system_prompt, self.model_name) for gip in grounding_instruction_prompts]
+            goutputs = execute_LLM_tasks(self.llm, grounding_prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
+
+            for zqf, o in zip(zipped_query_factoids, goutputs):
+                gsummary = o.outputs[0].text.strip()
+                print(f'generated response for question: ', gsummary)
+                gjson_arr = extract_json_array_by_key(gsummary, "groundings")
+                if gjson_arr != None and len(gjson_arr) > 0:
+                    qna_pairs_gen.append({
+                        "query": zqf[0],
+                        "factoids": zqf[1],
+                        "groundings": gjson_arr
+                    })
+                else:
+                    missed_qna_pairs.append({
+                        "query": zqf[0],
+                        "factoids": zqf[1],
+                    })
 
         print('no of valid qna and grounding pairs', len(qna_pairs_gen))
         print('no of invalid qna and grounding pairs', len(missed_qna_pairs))
@@ -199,38 +202,49 @@ class GroundingsGenerator:
             print('total length of filtered array: ', len(filtered_queries))
             metadata = f'Company: {self.company_name} | SEC Filing: 10-K | Related topic: {SEED_METADATA_TOPICS[topic_index]}'
             all_resp = []
-            attempts = 0
             print('\nStarting grounding generation for batch of factoids\n')
             for bi,i in enumerate(range(0, len(filtered_queries), PROMPT_BATCH_SIZE)):
-                qna_pairs = [{ 'query': qs["query"], 'answer': qs['answer'] } for qs in filtered_queries[i:(i+PROMPT_BATCH_SIZE)]]
-                factoids_arr_batch = [qs["factoids"] for qs in filtered_queries[i:(i+PROMPT_BATCH_SIZE)]] 
-                factoids_doc_batch = ["[" + ",".join(f"\"{item['factoid']}\"" for item in factoid_subarr) + "]" for factoid_subarr in factoids_arr_batch]
+                query_strs = [qs['query'] for qs in filtered_queries[i:(i+PROMPT_BATCH_SIZE)]]
+                factoids_arr_batch = [qs["factoids"] for qs in filtered_queries[i:(i+PROMPT_BATCH_SIZE)]]
+                factoids_arr_str_batch = [json.dumps(qs, indent=4) for qs in factoids_arr_batch]
+                #factoids_doc_batch = [factoid_subarr_str + "]" for factoid_subarr_str in factoids_arr_str_batch]
                 print(f'\nRunning grounding generation for factoids batch {bi}')
-                qobjs, missed_qna_pairs = self.__generate_groundings(factoids_doc_batch, factoids_arr_batch, qna_pairs, metadata)
+                qobjs, missed_qna_pairs = self.__generate_groundings(factoids_arr_str_batch, factoids_arr_batch, query_strs, metadata)
                 all_resp.extend(qobjs)
+                attempts = 0
                 while (len(missed_qna_pairs) != 0) and (attempts < NO_OF_TRIALS):
-                    qna_pairs = [{ 'query': qs["query"], 'answer': qs['answer'] } for qs in missed_qna_pairs]
-                    factoids_arr_batch = [qs["factoids"] for qs in missed_qna_pairs] 
-                    factoids_doc_batch = ["[" + ",".join(f"\"{item['factoid']}\"" for item in qs['factoids']) + "]" for qs in missed_qna_pairs]
+                    query_strs = [qs['query'] for qs in filtered_queries[i:(i+PROMPT_BATCH_SIZE)]]
+                    factoids_arr_batch = [qs["factoids"] for qs in filtered_queries[i:(i+PROMPT_BATCH_SIZE)]]
+                    factoids_arr_str_batch = [json.dumps(qs, indent=4) for qs in factoids_arr_batch]
                     print(f'\nRunning grounding generation for factoids batch {bi}')
-                    qobjs, missed_qna_pairs = self.__generate_groundings(factoids_doc_batch, factoids_arr_batch, qna_pairs, metadata)
+                    qobjs, missed_qna_pairs = self.__generate_groundings(factoids_arr_str_batch, factoids_arr_batch, query_strs, metadata)
                     all_resp.extend(qobjs)
                     attempts += 1
                     
             print('No of valid query, answer and grounding set: ', len(all_resp))
             if len(all_resp) > 0:
-                query_json_path = f'./intermediate_data/query_sets/{self.model_folder}/{self.filename}_gen_queries.json'
-                queries = { 'queries': [] }
-                #print("topic queries", topic_queries, len(topic_queries), query_dict)
-                topic_queries = { "topic": SEED_METADATA_TOPICS[topic_index], "query_sets": [] }
-                topic_queries["query_sets"] = all_resp
-                queries["queries"].append(topic_queries)
+                topic_queries = [tq for tq in query_store["queries"] if tq["topic"] == SEED_METADATA_TOPICS[topic_index]]
+                if len(topic_queries) > 0:
+                    topic_queries = topic_queries[0]
+                    topic_queries["query_sets"] = all_resp
+                    for iq,_ in enumerate(query_store["queries"]):
+                        if query_store["queries"][iq]["topic"] == SEED_METADATA_TOPICS[topic_index]:
+                            query_store["queries"][iq]["query_sets"] = topic_queries["query_sets"]
+                else:
+                    topic_queries = { "topic": SEED_METADATA_TOPICS[topic_index], "query_sets": [] }
+                    topic_queries["query_sets"] = all_resp
+                    query_store["queries"].append(topic_queries)
 
-                with open(query_json_path, 'w') as fp:
-                    json.dump(queries, fp) 
+                with open(iquery_store_fp, 'w') as fp:
+                    json.dump(query_store, fp) 
         else:
             print('Chunk store not found!')
             SystemExit()
+
+    def destroy(self):
+        del self.llm
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
@@ -241,7 +255,7 @@ if __name__ == "__main__":
     old_stdout = sys.stdout
     sys.stdout = log_file
 
-    multiprocessing.set_start_method("spawn")  # Fixes CUDA issue with multiprocessing
+    #multiprocessing.set_start_method("spawn")  # Fixes CUDA issue with multiprocessing
     torch.cuda.init()
 
     parser = argparse.ArgumentParser()
@@ -251,17 +265,17 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    query_gen = GroundingsGenerator(filename = args.filename, model_index = args.model_index)
+    ground_gen = GroundingsGenerator(filename = args.filename, model_index = args.model_index)
     if args.topic_index == -1:
         for ti in range(len(SEED_METADATA_TOPICS)):
             print(f'Generating groundings for qna pairs on topic {SEED_METADATA_TOPICS[ti]}')
-            query_gen.generate_groundings(topic_index = ti)
+            ground_gen.generate_groundings(topic_index = ti)
             print(f'Finished generating groundings for topic {SEED_METADATA_TOPICS[ti]}')
     else:
         print(f'Generating groundings for qna pairs on topic {SEED_METADATA_TOPICS[args.topic_index]}')
-        query_gen.generate_groundings(topic_index = args.topic_index)
+        ground_gen.generate_groundings(topic_index = args.topic_index)
         print(f'Finished generating groundings for topic {SEED_METADATA_TOPICS[args.topic_index]}')
-
+    ground_gen.destroy()
     
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout

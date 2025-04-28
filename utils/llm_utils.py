@@ -3,7 +3,7 @@ from vllm import SamplingParams
 
 def get_prompt_token(prompt_text, system_prompt_text, model_name):
     
-    tokenizer = AutoTokenizer.from_pretrained(f"./models/{model_name}")
+    tokenizer = AutoTokenizer.from_pretrained(f"models/{model_name}")
     tokenizer.lang = "en"
 
     messages = [
@@ -34,3 +34,10 @@ def execute_LLM_tasks(llm_model, prompts, max_new_tokens, temperature = 0.3, top
     #)
     #return outputs[0].outputs[0].text if outputs else ""
     return outputs
+
+def execute_gemini_LLM_task(llm_model, instruction_prompt):
+    response = llm_model.models.generate_content(
+        model = "gemini-2.0-flash",
+        contents = f"{instruction_prompt}"
+    )
+    return response.text
