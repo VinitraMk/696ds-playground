@@ -8,9 +8,12 @@ import sys
 import argparse
 import re
 import gc
-from utils.string_utils import is_valid_sentence, extract_json_text_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task
 from google import genai
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+
+from utils.string_utils import is_valid_sentence, extract_json_text_by_key
+from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer
+
 
 COMPANY_DICT = {
     'INTC': 'Intel Corp.',
@@ -30,7 +33,7 @@ MODELS = [
     "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4",
     "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int8",
     "Qwen/QwQ-32B-AWQ",
-    "meta-llama/Meta-Llama-3-70B",
+    "meta-llama/Meta-Llama-3.3-70B-Instruct",
     "gemini-2.0-flash"
 ]
 
@@ -47,15 +50,24 @@ os.environ['HF_HOME'] = HF_CACHE_DIR
 RELEVANCE_THRESHOLD = 2.0
 MAX_FACTOIDS_TO_SAMPLE = 25
 MIN_FACTOIDS_NEEDED_FOR_GENERATION = 15
-PROMPT_BATCH_SIZE = 3
+PROMPT_BATCH_SIZE = 1
 NO_OF_TRIALS = 3
+FILENAMES = [
+    '10-K_AMD_20231230',
+    '10-K_NVDA_20240128',
+    '10-K_F_20231231',
+    '10-K_GM_20231231',
+    '10-K_INTC_20231230',
+    '10-K_TSLA_20231231'
+]
 
 class AnswerGenerator:
 
-    def __init__(self, filename, model_index = 6):
-        self.filename = filename
-        self.company_abbr = COMPANY_DICT[filename.split('_')[1]]
+    def __init__(self, model_index = 6, prompt_batch_size = 3):
         self.model_name = MODELS[model_index]
+        self.prompt_batch_size = prompt_batch_size
+
+        self.device = torch.device("cuda")
         with open("./config.json", "r") as fp:
             cfg = json.load(fp)
 
@@ -80,17 +92,27 @@ class AnswerGenerator:
                 api_key = cfg["google_api_keys"]["vinitramk4"]
             )
             self.model_folder = "gemini"
-        elif "Llama" in self.model_name:
-            #mf = self.model_name.split("/")[1]
-            self.__quantize_llama(self.model_name)
-            self.llm = LLM(model=f"./models/llama/{self.model_name}-awq",
-                quantization="awq",
-                gpu_memory_utilization=0.8,
-                download_dir = f'./models/llama/{self.model_name}-awq',
-                tensor_parallel_size=torch.cuda.device_count())
+        elif "Llama-3.3-70B" in self.model_name:
+            model_path = "/datasets/ai/llama3/hub/models--meta-llama--Llama-3.3-70B-Instruct/snapshots/6f6073b423013f6a7d4d9f39144961bfbfbc386b"
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype="float16",
+                bnb_4bit_quant_type="nf4", 
+                bnb_4bit_use_double_quant=True,  
+                llm_int8_enable_fp32_cpu_offload=True
+            )
+
+            self.llm = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                quantization_config=bnb_config,  
+                device_map="sequential",  
+                offload_folder="/tmp/offload", 
+                local_files_only=True
+            )
             self.model_folder = "llama"
+            self.tokenizer = get_tokenizer(self.model_name)
         else:
-            raise ValueError('Invalid model index passed!')
+            raise SystemExit('Invalid model index passed!')
 
     def __cleanup_text(self, texts, wc = 100):
         cleanup_instruction = """
@@ -147,7 +169,7 @@ class AnswerGenerator:
             return cleaned_sentences
         else:
             cleanup_system_prompt = "You are a helpful assistant, that given a text returns a cleaned, grammatically meaningful sentence if it exists."
-            cleanup_instruction_prompt_tokens = [get_prompt_token(prompt, cleanup_system_prompt, self.model_name) for prompt in cleanup_instructions]
+            cleanup_instruction_prompt_tokens = [get_prompt_token(prompt, cleanup_system_prompt, self.tokenizer) for prompt in cleanup_instructions]
             coutputs = execute_LLM_tasks(self.llm, prompts=cleanup_instruction_prompt_tokens, max_new_tokens=2000, temperature=0.1, top_p=0.9)
             for o in coutputs:
                 osummary = o.outputs[0].text.strip()
@@ -238,7 +260,7 @@ class AnswerGenerator:
             return rqna_pairs
         else:
             rans_system_prompt = "You are a helpful assistant, that given a Q&A pair, a list of groundings (citations related to the given Q&A pair) improves the answer to the question based on the factoids."
-            rans_prompt_tokens = [get_prompt_token(rans_prompt_text, rans_system_prompt, self.model_name) for rans_prompt_text in rans_instruction_prompts]
+            rans_prompt_tokens = [get_prompt_token(rans_prompt_text, rans_system_prompt, self.tokenizer) for rans_prompt_text in rans_instruction_prompts]
             raoutputs = execute_LLM_tasks(self.llm, rans_prompt_tokens, max_new_tokens=3000, temperature=0.6, top_p=0.9)
 
             for zqf, o in zip(zipped_qsnts_factoids, raoutputs):
@@ -335,9 +357,31 @@ class AnswerGenerator:
                         'query': zipped_qsnts_groundings[ai][0],
                         'groundings': zipped_qsnts_groundings[ai][1]
                     })
+        elif "Llama-3.3-70B" in self.model_name:
+            ans_system_prompt = "You are a helpful assistant, that given a query and list of groundings (citations related to the query), generates meaningful answer to the question."
+            ans_prompt_tokens = self.tokenizer([get_prompt_token(ans_prompt_text, ans_system_prompt, self.tokenizer) for ans_prompt_text in ans_instruction_prompts], return_tensors = "pt", truncation = True, padding = True).to(self.device)
+            aoutputs = execute_llama_LLM_task(self.llm, ans_prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
+            for zqf, o in zip(zipped_qsnts_groundings, aoutputs):
+                asummary = o
+                print(f'generated response for question: ', asummary)
+                if "Input for your task" in asummary:
+                    ti = asummary.index("Input for your task")
+                    ajson = extract_json_text_by_key(asummary[ti:], "answer")
+                    print('qjson', ajson)
+                    if ajson != None and "answer" in ajson:
+                        qna_pairs.append({
+                            'query': zqf[0],
+                            'answer': ajson['answer'],
+                            'groundings': zqf[1]
+                        })
+                    else:
+                        missed_qstns.append({
+                            'query': zqf[0],
+                            'groundings': zqf[1]
+                        })
         else:
             ans_system_prompt = "You are a helpful assistant, that given a query and list of groundings (citations related to the query), generates meaningful answer to the question."
-            ans_prompt_tokens = [get_prompt_token(ans_prompt_text, ans_system_prompt, self.model_name) for ans_prompt_text in ans_instruction_prompts]
+            ans_prompt_tokens = [get_prompt_token(ans_prompt_text, ans_system_prompt, self.tokenizer) for ans_prompt_text in ans_instruction_prompts]
             aoutputs = execute_LLM_tasks(self.llm, ans_prompt_tokens, max_new_tokens=3000, temperature=0.6, top_p=0.9)
 
             for zqf, o in zip(zipped_qsnts_groundings, aoutputs):
@@ -372,18 +416,15 @@ class AnswerGenerator:
 
 
         return qna_pairs, missed_qstns
+
+    def set_filename(self, filename):
+        self.filename = filename
+        self.company_name = COMPANY_DICT[filename.split('_')[1]]
         
     def generate_answer(self, topic_index = 0, refine_answers = False):
         
-
-        # Filter relevant chunks
-
-        all_resp = []
-        #no_of_trials = 10
-
         iquery_store_fp = f'intermediate_data/query_sets/{self.model_folder}/{self.filename}_gen_queries.json'
         
-        #chunk_obj = [chunk for chunk in chunk_store["chunks"] if chunk["chunk_filename"] == chunk_fn]
         if os.path.exists(iquery_store_fp):
             with open(iquery_store_fp, 'r') as fp:
                 query_store = json.load(fp)
@@ -399,15 +440,12 @@ class AnswerGenerator:
                 SystemExit()
 
             print('total length of filtered array: ', len(filtered_queries))
-            #factoid_subarr = all_factoids[:MAX_FACTOIDS_TO_SAMPLE]
-            metadata = f'Company: {self.company_abbr} | SEC Filing: 10-K | Related topic: {SEED_METADATA_TOPICS[topic_index]}'
-            #for idx in random_indices:
-                #factoid_subarr.append(all_factoids[idx])
+            metadata = f'Company: {self.company_name} | SEC Filing: 10-K | Related topic: {SEED_METADATA_TOPICS[topic_index]}'
             all_resp = []
             print('\nStarting answer generation for batch of questions\n')
-            for bi,i in enumerate(range(0, len(filtered_queries), PROMPT_BATCH_SIZE)):
-                query_strs_batch = [qs["query"] for qs in filtered_queries[i:(i+PROMPT_BATCH_SIZE)]]
-                groundings_arr_batch = [qs["groundings"] for qs in filtered_queries[i:(i+PROMPT_BATCH_SIZE)]] 
+            for bi,i in enumerate(range(0, len(filtered_queries), self.prompt_batch_size)):
+                query_strs_batch = [qs["query"] for qs in filtered_queries[i:(i+self.prompt_batch_size)]]
+                groundings_arr_batch = [qs["groundings"] for qs in filtered_queries[i:(i+self.prompt_batch_size)]] 
                 #factoids_arr_str_batch = [json.dumps(qs, indent=4) for qs in factoids_arr_batch]
                 groundings_doc_batch = ["[" + ",".join(f"\"{item}\"" for item in groundings_arr) + "]" for groundings_arr in groundings_arr_batch]
                 print(f'\nRunning answer generation for factoids batch {bi}')
@@ -415,8 +453,8 @@ class AnswerGenerator:
                 all_resp.extend(qobjs)
                 attempts = 0
                 while (len(missed_qstns) != 0) and (attempts < NO_OF_TRIALS):
-                    query_strs_batch = [qs["query"] for qs in filtered_queries[i:(i+PROMPT_BATCH_SIZE)]]
-                    groundings_arr_batch = [qs["groundings"] for qs in filtered_queries[i:(i+PROMPT_BATCH_SIZE)]] 
+                    query_strs_batch = [qs["query"] for qs in filtered_queries[i:(i+self.prompt_batch_size)]]
+                    groundings_arr_batch = [qs["groundings"] for qs in filtered_queries[i:(i+self.prompt_batch_size)]] 
                     #factoids_doc_batch = ["[" + ",".join(f"\"{item['factoid']}\"" for item in qs['factoids']) + "]" for qs in missed_qstns]
                     groundings_doc_batch = ["[" + ",".join(f"\"{item}\"" for item in groundings_arr) + "]" for groundings_arr in groundings_arr_batch]
                     qobjs, missed_qstns = self.__generate_answers(groundings_doc_batch, groundings_arr_batch, query_strs_batch, metadata, refine_answers)
@@ -441,13 +479,13 @@ class AnswerGenerator:
                 with open(iquery_store_fp, 'w') as fp:
                     json.dump(query_store, fp) 
         else:
-            print('Chunk store not found!')
-            SystemExit()
+            SystemExit('Chunk store not found!')
 
     def destroy(self):
         del self.llm
         gc.collect()
         torch.cuda.empty_cache()
+        #os._exit(0)
 
 if __name__ == "__main__":
     st = time()
@@ -464,20 +502,25 @@ if __name__ == "__main__":
     parser.add_argument('--model_index', type=int, default = 6, required = False)
     parser.add_argument('--refine_answers', type = bool, default = False, required = False)
     parser.add_argument('--filename', type = str, default = '10-K_NVDA_20240128', required = False)
+    parser.add_argument('--prompt_batch_size', type = int, default = 3, required = False)
 
     args = parser.parse_args()
 
-    ans_gen = AnswerGenerator(filename = args.filename, model_index = args.model_index)
+    ans_gen = AnswerGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size)
+    print(f'\n\nGenerating answers for file: {args.filename}')
+    ans_gen.set_filename(args.filename)
     if args.topic_index == -1:
         for ti in range(len(SEED_METADATA_TOPICS)):
-            print(f'Generating answers for questions on topic: {SEED_METADATA_TOPICS[ti]}')
+            print(f'\nGenerating answers for questions on topic: {SEED_METADATA_TOPICS[ti]}')
             ans_gen.generate_answer(topic_index = ti, refine_answers = args.refine_answers)
             print(f'Finished generating answers for topic: {SEED_METADATA_TOPICS[ti]}')
     else:
-        print(f'Generating questions for topic: {SEED_METADATA_TOPICS[args.topic_index]}')
+        print(f'\nGenerating questions for topic: {SEED_METADATA_TOPICS[args.topic_index]}')
         ans_gen.generate_answer(topic_index = args.topic_index, refine_answers = args.refine_answers)
         print(f'Finished generating answers for topic: {SEED_METADATA_TOPICS[args.topic_index]}')
     ans_gen.destroy()
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout
     log_file.close()
+
+    os._exit(0)

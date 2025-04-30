@@ -8,9 +8,13 @@ from time import time
 import sys
 import argparse
 import gc
-from utils.string_utils import is_valid_sentence, extract_json_text_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task
 from google import genai
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+
+from utils.string_utils import is_valid_sentence, extract_json_text_by_key
+from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer
+
+
 
 COMPANY_DICT = {
     'INTC': 'Intel Corp.',
@@ -30,7 +34,7 @@ MODELS = [
     "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4",
     "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int8",
     "Qwen/QwQ-32B-AWQ",
-    "meta-llama/Meta-Llama-3-70B",
+    "meta-llama/Meta-Llama-3.3-70B-Instruct",
     "gemini-2.0-flash"
 ]
 
@@ -47,14 +51,24 @@ os.environ['HF_HOME'] = HF_CACHE_DIR
 RELEVANCE_THRESHOLD = 2.0
 MAX_FACTOIDS_TO_SAMPLE = 25
 MIN_FACTOIDS_NEEDED_FOR_GENERATION = 15
-NO_OF_TRIALS = 5
+NO_OF_TRIALS = 3
+FILENAMES = [
+    '10-K_AMD_20231230',
+    '10-K_NVDA_20240128',
+    '10-K_F_20231231',
+    '10-K_GM_20231231',
+    '10-K_INTC_20231230',
+    '10-K_TSLA_20231231'
+]
 
 class QueryGenerator:
 
-    def __init__(self, filename, model_index = 6):
-        self.filename = filename
-        self.company_name = COMPANY_DICT[filename.split('_')[1]]
+    def __init__(self, model_index = 6):
+        #self.filename = filename
+        #self.company_name = COMPANY_DICT[filename.split('_')[1]]
+        self.device = torch.device("cuda")
         self.model_name = MODELS[model_index]
+
         with open("./config.json", "r") as fp:
             cfg = json.load(fp)
 
@@ -66,6 +80,7 @@ class QueryGenerator:
                     #gpu_memory_utilization=0.95,
                     tensor_parallel_size=torch.cuda.device_count())
             self.model_folder = "qwq"
+            self.tokenizer = get_tokenizer(self.model_name)
         elif "Qwen2.5" in self.model_name:
             self.llm = LLM(model=f"./models/{self.model_name}",
                 quantization = "gptq_marlin",
@@ -74,13 +89,34 @@ class QueryGenerator:
                 gpu_memory_utilization=0.95,
                 tensor_parallel_size=torch.cuda.device_count())
             self.model_folder = "qwq"
+            self.tokenizer = get_tokenizer(self.model_name)
         elif "gemini" in self.model_name:
             self.llm = genai.Client(
                 api_key = cfg["google_api_keys"]["vinitramk1"]
             )
             self.model_folder = "gemini"
+        elif "Llama-3.3-70B" in self.model_name:
+            model_path = "/datasets/ai/llama3/hub/models--meta-llama--Llama-3.3-70B-Instruct/snapshots/6f6073b423013f6a7d4d9f39144961bfbfbc386b"
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype="float16",
+                bnb_4bit_quant_type="nf4", 
+                bnb_4bit_use_double_quant=True,  
+                llm_int8_enable_fp32_cpu_offload=True
+            )
+
+            self.llm = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                quantization_config=bnb_config,  
+                device_map="sequential",  
+                offload_folder="/tmp/offload", 
+                local_files_only=True
+            )
+            self.model_folder = "llama"
+            self.tokenizer = get_tokenizer(self.model_name)
+            #tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
         else:
-            raise ValueError('Invalid model index passed!')
+            raise SystemExit('Invalid model index passed!')
 
     def __generate_queries(self, fact_doc_text, metadata):
 
@@ -133,9 +169,21 @@ class QueryGenerator:
             qjson = extract_json_text_by_key(qsummary, "query")
             if qjson != None and "query" in qjson and is_valid_sentence(qjson["query"], 100):
                 query_strs.append(qjson["query"])
+        elif "Llama-3.3-70B" in self.model_name:
+            qstn_prompt_tokens = self.tokenizer([get_prompt_token(qstn_instruction_prompt, qstn_system_prompt, self.tokenizer)], return_tensors = "pt").to(self.device)
+            qoutputs = execute_llama_LLM_task(self.llm, qstn_prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
+            for j,o in enumerate(qoutputs):
+                qsummary = o
+                print(f'generated {j}th response for question: ', qsummary)
+                if "Input for your task" in qsummary:
+                    ti = qsummary.index("Input for your task")
+                    qjson = extract_json_text_by_key(qsummary[ti:], "query")
+                    print('qjson', qjson)
+                    if qjson != None and "query" in qjson and is_valid_sentence(qjson["query"], 100):
+                        query_strs.append(qjson["query"])
         else:
-            qstn_prompt_tokens = [get_prompt_token(qstn_instruction_prompt, qstn_system_prompt, self.model_name)]
-            qoutputs = execute_LLM_tasks(self.llm, qstn_prompt_tokens, max_new_tokens=3000, temperature=0.6, top_p=0.9)
+            qstn_prompt_tokens = [get_prompt_token(qstn_instruction_prompt, qstn_system_prompt, self.tokenizer)]
+            qoutputs = execute_LLM_tasks(self.llm, qstn_prompt_tokens, self.model_name, max_new_tokens=3000, temperature=0.6, top_p=0.9)
             for j, o in enumerate(qoutputs):
                 qsummary = o.outputs[0].text.strip()
                 print(f'generated {j}th response for question: ', qsummary)
@@ -144,11 +192,15 @@ class QueryGenerator:
                     query_strs.append(qjson["query"])
 
         return query_strs
+    
+    def set_filename(self, filename):
+        self.filename = filename
+        self.company_name = COMPANY_DICT[filename.split('_')[1]]
         
     def generate_query(self, no_of_qstns = 5, topic_index = 0):
 
         all_resp = []
-        if self.model_folder == "gemini":
+        if self.model_folder == "gemini" or self.model_folder == "llama":
             chunk_store_fp = f'data/chunked_data/global_chunk_store/qwq/{self.filename}_chunk_store.json'
         else:
             chunk_store_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{self.filename}_chunk_store.json'
@@ -169,16 +221,21 @@ class QueryGenerator:
             #for idx in random_indices:
                 #factoid_subarr.append(all_factoids[idx])
             all_resp = []
+            attempts = 0
             print('\nStarting query generation for batch of factoids\n')
-            for fbi,i in enumerate(range(0, len(filtered_factoids), MAX_FACTOIDS_TO_SAMPLE)):
-                factoid_subarr = filtered_factoids[i:i+MAX_FACTOIDS_TO_SAMPLE]
-                if len(factoid_subarr) < MIN_FACTOIDS_NEEDED_FOR_GENERATION:
-                    factoid_subarr = filtered_factoids
-                factoid_str = "[" + ",\n".join(f"{item['factoid']}" for item in factoid_subarr) + "]"
-                print(f'\nRunning query  generation for factoids batch {fbi}')
-                query_strs = self.__generate_queries(factoid_str, metadata)
-                all_resp.extend([{'query': query_str, 'factoids': factoid_subarr } for query_str in query_strs])
-                print('no of valid qstns formed so far: ', len(all_resp))
+            while (len(all_resp) < no_of_qstns) and (attempts < NO_OF_TRIALS):
+                for fbi,i in enumerate(range(0, len(filtered_factoids), MAX_FACTOIDS_TO_SAMPLE)):
+                    factoid_subarr = filtered_factoids[i:i+MAX_FACTOIDS_TO_SAMPLE]
+                    if len(factoid_subarr) < MIN_FACTOIDS_NEEDED_FOR_GENERATION:
+                        factoid_subarr = filtered_factoids
+                    factoid_str = "[" + ",\n".join(f"{item['factoid']}" for item in factoid_subarr) + "]"
+                    print(f'\nRunning query  generation for factoids batch {fbi}')
+                    query_strs = self.__generate_queries(factoid_str, metadata)
+                    all_resp.extend([{'query': query_str, 'factoids': factoid_subarr } for query_str in query_strs])
+                    print('no of valid qstns formed so far: ', len(all_resp))
+                    if len(all_resp) >= no_of_qstns:
+                        break
+                attempts += 1
                     
             print(f'No of valid queries on topic {SEED_METADATA_TOPICS[topic_index]}: ', len(all_resp))
             if len(all_resp) > 0:
@@ -195,16 +252,15 @@ class QueryGenerator:
                 with open(iquery_json_path, 'w') as fp:
                     json.dump(queries, fp)
         else:
-            print('Chunk store not found!')
-            SystemExit()
+            raise SystemExit('Chunk store not found!')
 
     def destroy(self):
         print('Destroying llm object')
-        del self.llm
         gc.collect()
         torch.cuda.empty_cache()
-        print('Completed destruction...')
-        
+        print('Completed destruction...exiting...')
+        #os._exit(0)
+
 if __name__ == "__main__":
     st = time()
 
@@ -225,17 +281,21 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    query_gen = QueryGenerator(filename = args.filename, model_index = args.model_index)
+    query_gen = QueryGenerator(model_index = args.model_index)
+    print(f'\n\nGenerating queries for file: {args.filename}')
+    query_gen.set_filename(args.filename)
     if args.topic_index == -1:
         for ti in range(len(SEED_METADATA_TOPICS)):
-            print(f'Generating questions for topic: {SEED_METADATA_TOPICS[ti]}')
+            print(f'\nGenerating questions for topic: {SEED_METADATA_TOPICS[ti]}')
             query_gen.generate_query(no_of_qstns = args.no_of_qstns, topic_index = ti)
             print(f'Finished generating questions for topic: {SEED_METADATA_TOPICS[ti]}')
     else:
-        print(f'Generating questions for topic: {SEED_METADATA_TOPICS[args.topic_index]}')
+        print(f'\nGenerating questions for topic: {SEED_METADATA_TOPICS[args.topic_index]}')
         query_gen.generate_query(no_of_qstns = args.no_of_qstns, topic_index = args.topic_index)
         print(f'Finished generating questions for topic: {SEED_METADATA_TOPICS[args.topic_index]}')
-    #query_gen.destroy()
+
+    query_gen.destroy()
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout
     log_file.close()
+    os._exit(0)
