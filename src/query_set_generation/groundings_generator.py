@@ -292,7 +292,7 @@ class GroundingsGenerator:
         #del self.llm
         gc.collect()
         torch.cuda.empty_cache()
-        #os._exit(0)
+        os._exit(0)
 
 if __name__ == "__main__":
     st = time()
@@ -309,7 +309,7 @@ if __name__ == "__main__":
     parser.add_argument('--topic_index', type=int, default = 0, required = False)
     parser.add_argument('--model_index', type=int, default = 6, required = False)
     parser.add_argument('--filename', type = str, default = '10-K_NVDA_20240128', required = False)
-    parser.add_argument('--prompt_batch_size', type = int, default = 3, required = False)
+    parser.add_argument('--prompt_batch_size', type = int, default = 1, required = False)
 
     args = parser.parse_args()
 
@@ -327,9 +327,8 @@ if __name__ == "__main__":
         ground_gen.generate_groundings(topic_index = args.topic_index)
         print(f'Finished generating groundings for topic {SEED_METADATA_TOPICS[args.topic_index]}')
 
-    ground_gen.destroy()
     
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout
     log_file.close()
-    os._exit(0)
+    ground_gen.destroy()

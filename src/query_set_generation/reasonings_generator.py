@@ -254,7 +254,7 @@ class ReasoningsGenerator:
             with open(in_query_store_fp, 'r') as fp:
                 query_store = json.load(fp)
             query_arr = query_store["queries"]
-            print('total no of queries formed: ', len(query_arr))
+            #print('total no of queries formed: ', len(query_arr))
             filtered_queries = [querysets for querysets in query_arr if querysets["topic"] == SEED_METADATA_TOPICS[topic_index]]
             if len(filtered_queries) > 0:
                 filtered_queries = filtered_queries[0]["query_sets"]
@@ -309,9 +309,9 @@ class ReasoningsGenerator:
         del self.llm
         gc.collect()
         torch.cuda.empty_cache()
-        #if os.path.exists(f'intermediate_data/query_sets/{self.model_folder}/{self.filename}_gen_queries.json'):
-            #os.remove(f'intermediate_data/query_sets/{self.model_folder}/{self.filename}_gen_queries.json')
-        #os._exit(0)
+        if os.path.exists(f'intermediate_data/query_sets/{self.model_folder}/{self.filename}_gen_queries.json'):
+            os.remove(f'intermediate_data/query_sets/{self.model_folder}/{self.filename}_gen_queries.json')
+        os._exit(0)
 
 if __name__ == "__main__":
     st = time()
@@ -328,7 +328,7 @@ if __name__ == "__main__":
     parser.add_argument('--topic_index', type=int, default = 0, required = False)
     parser.add_argument('--model_index', type=int, default = 6, required = False)
     parser.add_argument('--filename', type = str, default = '10-K_NVDA_20240128', required = False)
-    parser.add_argument('--prompt_batch_size', type = int, default = 3, required = False)
+    parser.add_argument('--prompt_batch_size', type = int, default = 1, required = False)
 
     args = parser.parse_args()
 
@@ -341,16 +341,16 @@ if __name__ == "__main__":
             print(f'\nGenerating reasonings for QNA and grounding pair on topic: {SEED_METADATA_TOPICS[ti]}')
             reason_gen.generate_reasonings(topic_index = ti)
             print(f'Finished generating reasonings for topic {SEED_METADATA_TOPICS[ti]}')
+            torch.cuda.empty_cache()
     else:
         print(f'\nGenerating reasonings for QNA and grounding pair on topic: {SEED_METADATA_TOPICS[args.topic_index]}')
         reason_gen.generate_reasonings(topic_index = args.topic_index)
         print(f'Finished generating reasonings for topic {SEED_METADATA_TOPICS[args.topic_index]}')
     # remove intermediate data file
-    if os.path.exists(f'intermediate_data/query_sets/{reason_gen.model_folder}/{args.filename}_gen_queries.json'):
-        os.remove(f'intermediate_data/query_sets/{reason_gen.model_folder}/{args.filename}_gen_queries.json')
+    #if os.path.exists(f'intermediate_data/query_sets/{reason_gen.model_folder}/{args.filename}_gen_queries.json'):
+        #os.remove(f'intermediate_data/query_sets/{reason_gen.model_folder}/{args.filename}_gen_queries.json')
 
-    reason_gen.destroy()
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout
     log_file.close()
-    os._exit(0)
+    reason_gen.destroy()

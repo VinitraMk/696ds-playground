@@ -201,7 +201,7 @@ class AnswerGenerator:
         Query: <query text>
         Answer: <answer text>
         Metadata: <meta data of the main company upon which the factoids are based.>
-        Groundings: [\<list of citations relevant to the Q&A pair.\>]
+        Factoids: [\<list of citations relevant to the Q&A pair.\>]
 
         ### Output format (JSON):
         Answer: {
@@ -212,7 +212,7 @@ class AnswerGenerator:
         Query: "How does Apple’s commitment to achieving carbon neutrality across its supply chain and products by 2030, as discussed in its 10-K, affect its cost structure, supplier relationships, and long-term profitability, and what are the potential risks and rewards associated with this aggressive ESG strategy?"
         Answer: "Apple’s environmental initiatives have a significant impact on its cost structure, supplier relationships, and long-term profitability. Upfront costs have risen due to investments in renewable energy, low-carbon manufacturing, and sustainable materials. However, the shift to clean energy and more energy-efficient processes may reduce operational costs over time. Additionally, integrating recycled and sustainable materials into product development increases design complexity and processing requirements, thereby raising costs. On the supply side, Apple mandates carbon reduction compliance from its suppliers, leading to higher compliance costs for those partners. Some suppliers may struggle to meet ESG standards, which could cause supply chain disruptions and increase component expenses. Nonetheless, Apple is strengthening its relationships with sustainable suppliers, gaining long-term cost advantages and fostering innovation. From a profitability perspective, Apple benefits from an enhanced brand reputation, which appeals to environmentally conscious consumers and supports premium pricing. Early adoption of ESG practices also mitigates future risks associated with carbon taxes and tighter environmental regulations. Although short-term profitability may be affected by increased expenses, the long-term financial gains are expected to outweigh these initial investments."
         Metadata: Company name: Apple | SEC Filing: 10-K | Related Topic: Risk Factors and Challenges
-        Groundings: [
+        Factoids: [
             "We set an ambitious goal — to make our products carbon neutral by 2030, across our entire supply chain and the lifetime energy use of our customers’ devices.",
             "Our corporate operations have run on 100% renewable energy since 2018.",
             "Apple also praised its continuing work in recycling, and making new components out of recycled materials. In 2023, 56% of cobalt in Apple batteries came from recycled sources, a 2x increase compared to the previous year.",
@@ -289,7 +289,7 @@ class AnswerGenerator:
                     })
             return rqna_pairs
 
-    def __generate_answers(self, groundings_doc_texts, groundings_arr_batch, query_strs_batch, metadata, refine_answers = False):
+    def __generate_answers(self, factoids_doc_texts, factoids_arr_batch, qg_pairs, metadata, refine_answers = False):
 
         ans_instruction_prompt = """
         ### Task:
@@ -309,7 +309,7 @@ class AnswerGenerator:
         ### Input format:
         Query: <query text>
         Metadata: <meta data of the main company upon which the factoids are based.>
-        Groundings: [\<list of citations relevant to the question\>]
+        Factoids: [\<list of citations relevant to the question\>]
 
         ### Output format (JSON):
         Answer: {
@@ -319,7 +319,7 @@ class AnswerGenerator:
         ### Example Input
         Query: "How does Apple’s commitment to achieving carbon neutrality across its supply chain and products by 2030, as discussed in its 10-K, affect its cost structure, supplier relationships, and long-term profitability, and what are the potential risks and rewards associated with this aggressive ESG strategy?"
         Metadata: Company name: Apple | SEC Filing: 10-K | Related Topic: Risk Factors and Challenges
-        Groundings: [
+        Factoids: [
             "We set an ambitious goal — to make our products carbon neutral by 2030, across our entire supply chain and the lifetime energy use of our customers’ devices.",
             "Our corporate operations have run on 100% renewable energy since 2018.",
             "Apple also praised its continuing work in recycling, and making new components out of recycled materials. In 2023, 56% of cobalt in Apple batteries came from recycled sources, a 2x increase compared to the previous year.",
@@ -335,12 +335,12 @@ class AnswerGenerator:
         ### Input for your task:
         """
 
-        zipped_qsnts_groundings = list(zip(query_strs_batch, groundings_doc_texts))
-        ans_instruction_prompts = [ans_instruction_prompt + f"\nQuery: {qo[0]}\nMetadata: {metadata}\nGroundings: {qo[1]}" for qo in zipped_qsnts_groundings]
+        zipped_qsnts_factoids = list(zip(qg_pairs, factoids_doc_texts))
+        ans_instruction_prompts = [ans_instruction_prompt + f"\nQuery: {qo[0]['query']}\nMetadata: {metadata}\nFactoids: {qo[1]}" for qo in zipped_qsnts_factoids]
         qna_pairs = []
         missed_qstns = []
         refined_qna_pairs = []
-        zipped_qsnts_groundings = list(zip(query_strs_batch, groundings_arr_batch))
+        zipped_qsnts_factoids = list(zip(qg_pairs, factoids_arr_batch))
         if "gemini" in self.model_name:
             for ai, ans_instruction_prompt in enumerate(ans_instruction_prompts):
                 asummary = execute_gemini_LLM_task(self.llm, ans_instruction_prompt)
@@ -348,20 +348,20 @@ class AnswerGenerator:
                 ajson = extract_json_text_by_key(asummary, "answer")
                 if ajson != None and "answer" in ajson:
                     qna_pairs.append({
-                        "query": zipped_qsnts_groundings[ai][0],
+                        "query": zipped_qsnts_factoids[ai][0]['query'],
                         "answer": ajson["answer"],
-                        "groundings": zipped_qsnts_groundings[ai][1]
+                        "groundings": zipped_qsnts_factoids[ai][0]['groundings']
                     })
                 else:
                     missed_qstns.append({
-                        'query': zipped_qsnts_groundings[ai][0],
-                        'groundings': zipped_qsnts_groundings[ai][1]
+                        'query': zipped_qsnts_factoids[ai][0]['query'],
+                        'groundings': zipped_qsnts_factoids[ai][1]['groundings']
                     })
         elif "Llama-3.3-70B" in self.model_name:
             ans_system_prompt = "You are a helpful assistant, that given a query and list of groundings (citations related to the query), generates meaningful answer to the question."
             ans_prompt_tokens = self.tokenizer([get_prompt_token(ans_prompt_text, ans_system_prompt, self.tokenizer) for ans_prompt_text in ans_instruction_prompts], return_tensors = "pt", truncation = True, padding = True).to(self.device)
             aoutputs = execute_llama_LLM_task(self.llm, ans_prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
-            for zqf, o in zip(zipped_qsnts_groundings, aoutputs):
+            for zqf, o in zip(zipped_qsnts_factoids, aoutputs):
                 asummary = o
                 print(f'generated response for question: ', asummary)
                 if "Input for your task" in asummary:
@@ -370,21 +370,21 @@ class AnswerGenerator:
                     print('qjson', ajson)
                     if ajson != None and "answer" in ajson:
                         qna_pairs.append({
-                            'query': zqf[0],
+                            'query': zqf[0]['query'],
                             'answer': ajson['answer'],
-                            'groundings': zqf[1]
+                            'groundings': zqf[0]['groundings']
                         })
                     else:
                         missed_qstns.append({
-                            'query': zqf[0],
-                            'groundings': zqf[1]
+                            'query': zqf[0]['query'],
+                            'groundings': zqf[0]['groundings']
                         })
         else:
             ans_system_prompt = "You are a helpful assistant, that given a query and list of groundings (citations related to the query), generates meaningful answer to the question."
             ans_prompt_tokens = [get_prompt_token(ans_prompt_text, ans_system_prompt, self.tokenizer) for ans_prompt_text in ans_instruction_prompts]
             aoutputs = execute_LLM_tasks(self.llm, ans_prompt_tokens, max_new_tokens=3000, temperature=0.6, top_p=0.9)
 
-            for zqf, o in zip(zipped_qsnts_groundings, aoutputs):
+            for zqf, o in zip(zipped_qsnts_factoids, aoutputs):
                 asummary = o.outputs[0].text.strip()
                 print(f'generated response for answer: ', asummary)
                 ajson = extract_json_text_by_key(asummary, "answer")
@@ -392,26 +392,26 @@ class AnswerGenerator:
                     cleaned_answers = self.__cleanup_text([ajson["answer"]], 200)
                     if cleaned_answers[0] != "":
                         qna_pairs.append({
-                            "query": zqf[0],
+                            "query": zqf[0]['query'],
                             "answer": cleaned_answers[0],
-                            "groundings": zqf[1]
+                            "groundings": zqf[1]['groundings']
                         })
                     else:
                         missed_qstns.append({
-                            'query': zqf[0],
-                            'groundings': zqf[1]
+                            'query': zqf[0]['query'],
+                            'groundings': zqf[1]['groundings']
                         })
                 else:
                     missed_qstns.append({
-                        'query': zqf[0],
-                        'groundings': zqf[1]
+                        'query': zqf[0]['query'],
+                        'groundings': zqf[1]['groundings']
                     })
 
         print('no of valid qna pairs', len(qna_pairs))
         print('no of invalid qna pairs', len(missed_qstns))
 
         if refine_answers:
-            refined_qna_pairs = self.__refine_answers(groundings_doc_texts, groundings_arr_batch, qna_pairs, metadata)
+            refined_qna_pairs = self.__refine_answers(factoids_doc_texts, factoids_arr_batch, qna_pairs, metadata)
             return refined_qna_pairs, missed_qstns
 
 
@@ -444,20 +444,22 @@ class AnswerGenerator:
             all_resp = []
             print('\nStarting answer generation for batch of questions\n')
             for bi,i in enumerate(range(0, len(filtered_queries), self.prompt_batch_size)):
-                query_strs_batch = [qs["query"] for qs in filtered_queries[i:(i+self.prompt_batch_size)]]
-                groundings_arr_batch = [qs["groundings"] for qs in filtered_queries[i:(i+self.prompt_batch_size)]] 
-                #factoids_arr_str_batch = [json.dumps(qs, indent=4) for qs in factoids_arr_batch]
-                groundings_doc_batch = ["[" + ",".join(f"\"{item}\"" for item in groundings_arr) + "]" for groundings_arr in groundings_arr_batch]
+                qg_pairs = [{ 'query': qs["query"], 'groundings': qs['groundings'] } for qs in filtered_queries[i:(i+self.prompt_batch_size)]]
+                #groundings_arr_batch = [qs["groundings"] for qs in filtered_queries[i:(i+self.prompt_batch_size)]] 
+                factoids_arr_batch = [qs["factoids"] for qs in filtered_queries[i:(i+self.prompt_batch_size)]]
+                factoids_doc_batch = ["[" + ",".join(f"\"{item['factoid']}\"" for item in qs) + "]" for qs in factoids_arr_batch]
+                #groundings_doc_batch = ["[" + ",".join(f"\"{item}\"" for item in groundings_arr) + "]" for groundings_arr in groundings_arr_batch]
                 print(f'\nRunning answer generation for factoids batch {bi}')
-                qobjs, missed_qstns = self.__generate_answers(groundings_doc_batch, groundings_arr_batch, query_strs_batch, metadata, refine_answers)
+                qobjs, missed_qstns = self.__generate_answers(factoids_doc_batch, factoids_arr_batch, qg_pairs, metadata, refine_answers)
                 all_resp.extend(qobjs)
                 attempts = 0
                 while (len(missed_qstns) != 0) and (attempts < NO_OF_TRIALS):
-                    query_strs_batch = [qs["query"] for qs in filtered_queries[i:(i+self.prompt_batch_size)]]
-                    groundings_arr_batch = [qs["groundings"] for qs in filtered_queries[i:(i+self.prompt_batch_size)]] 
-                    #factoids_doc_batch = ["[" + ",".join(f"\"{item['factoid']}\"" for item in qs['factoids']) + "]" for qs in missed_qstns]
-                    groundings_doc_batch = ["[" + ",".join(f"\"{item}\"" for item in groundings_arr) + "]" for groundings_arr in groundings_arr_batch]
-                    qobjs, missed_qstns = self.__generate_answers(groundings_doc_batch, groundings_arr_batch, query_strs_batch, metadata, refine_answers)
+                    query_strs_batch = [{ 'query': qs["query"], 'groundings': qs['groundings'] } for qs in missed_qstns]
+                    #groundings_arr_batch = [qs["groundings"] for qs in filtered_queries[i:(i+self.prompt_batch_size)]]
+                    factoids_arr_batch = [qs["factoids"] for qs in missed_qstns]
+                    factoids_doc_batch = ["[" + ",".join(f"\"{item['factoid']}\"" for item in qs) + "]" for qs in factoids_arr_batch]
+                    #groundings_doc_batch = ["[" + ",".join(f"\"{item}\"" for item in groundings_arr) + "]" for groundings_arr in groundings_arr_batch]
+                    qobjs, missed_qstns = self.__generate_answers(factoids_doc_batch, factoids_arr_batch, query_strs_batch, metadata, refine_answers)
                     all_resp.extend(qobjs)
                     attempts += 1
 
@@ -485,7 +487,7 @@ class AnswerGenerator:
         del self.llm
         gc.collect()
         torch.cuda.empty_cache()
-        #os._exit(0)
+        os._exit(0)
 
 if __name__ == "__main__":
     st = time()
@@ -502,7 +504,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_index', type=int, default = 6, required = False)
     parser.add_argument('--refine_answers', type = bool, default = False, required = False)
     parser.add_argument('--filename', type = str, default = '10-K_NVDA_20240128', required = False)
-    parser.add_argument('--prompt_batch_size', type = int, default = 3, required = False)
+    parser.add_argument('--prompt_batch_size', type = int, default = 1, required = False)
 
     args = parser.parse_args()
 
@@ -514,13 +516,14 @@ if __name__ == "__main__":
             print(f'\nGenerating answers for questions on topic: {SEED_METADATA_TOPICS[ti]}')
             ans_gen.generate_answer(topic_index = ti, refine_answers = args.refine_answers)
             print(f'Finished generating answers for topic: {SEED_METADATA_TOPICS[ti]}')
+            torch.cuda.empty_cache()
     else:
         print(f'\nGenerating questions for topic: {SEED_METADATA_TOPICS[args.topic_index]}')
         ans_gen.generate_answer(topic_index = args.topic_index, refine_answers = args.refine_answers)
         print(f'Finished generating answers for topic: {SEED_METADATA_TOPICS[args.topic_index]}')
-    ans_gen.destroy()
+
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout
     log_file.close()
 
-    os._exit(0)
+    ans_gen.destroy()

@@ -3,14 +3,13 @@ import os
 import sys
 import json
 from time import time
-from vllm import LLM, SamplingParams
-from transformers import AutoTokenizer
+from vllm import LLM
 import argparse
 import multiprocessing
 import re
 import ast
-from utils.string_utils import extract_json_object_array_by_keys, is_valid_sentence
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks
+from utils.string_utils import extract_json_array_by_key, is_valid_sentence, extract_json_object_array_by_keys, extract_json_text_by_key
+from utils.llm_utils import get_prompt_token, execute_LLM_tasks, get_tokenizer
 
 COMPANY_DICT = {
     'INTC': 'Intel Corp.',
@@ -51,7 +50,7 @@ HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggin
 os.environ['HF_HOME'] = HF_CACHE_DIR
 
 RELEVANCE_THRESHOLD = 2.0
-CHUNK_BATCH_SIZE = 10
+CHUNK_BATCH_SIZE = 5
 
 class FactoidGen:
 
@@ -65,13 +64,14 @@ class FactoidGen:
         # Load the model using vLLM
         self.model_name = MODELS[self.model_index]
         print('Model used: ', self.model_name)
+        self.tokenizer = get_tokenizer(model_name = self.model_name)
 
-        if self.model_name.startswith("Qwen"):
-            self.llm = LLM(model=f"models/{self.model_name}",
+        if "Qwen2.5" in self.model_name:
+            self.llm = LLM(model=f"./models/{self.model_name}",
                 quantization = "gptq_marlin",
                 download_dir = HF_CACHE_DIR,
-                max_model_len = 4096,
-                gpu_memory_utilization = 0.9,
+                max_model_len = 2048 * 4,
+                gpu_memory_utilization = 0.95,
                 tensor_parallel_size=torch.cuda.device_count())
             self.model_folder = "qwq"
         else:
@@ -80,19 +80,96 @@ class FactoidGen:
 
 
     def __extract_and_clean_factoids(self, text):
-        factoid_list = extract_json_object_array_by_keys(text, ["factoid", "citation"])
+        #factoid_list = extract_json_object_array_by_keys(text, ["factoid", "citation"])
+        factoid_list = extract_json_array_by_key(text, "factoids")
+        if (factoid_list) and (len(factoid_list) > 0):
         #print('factoid list', factoid_list)
-        clean_factoids_citations = [s for s in factoid_list if is_valid_sentence(s["factoid"])]
+            clean_factoids_citations = [s for s in factoid_list if is_valid_sentence(s)]
+        else:
+            clean_factoids_citations = []
         return clean_factoids_citations
+
+    def __generate_entities_from_factoids(self, factoids):
+
+        entity_instruction_prompt = """
+        Given a factoid, identify all significant entites or "nouns" described in each of the factoids.
+        This should include but not limited to:
+        - Object: Any concrete object that is referenced by the provided content.
+        - Organization: Any organization working with the main company either on permanent or temporary basis on some contracts.
+        - Concepts: Any significant abstract ideas or themes that are central to the factoids.
+
+        ### Input Format:
+        - Factoid: <factoid text>
+
+        ### Output Format (JSON):
+        "entities": ['entity 1', 'entity 2', ...]
+
+        ### Input for your task:
+        """
+        entity_system_prompt = "You are a helpful assistant, that given a list of factoids, generates entites addressed in the factoids."
+
+        #factoid_prompts = { f'{ci_str}': entity_instruction_prompt + "\nFactoids: [" + ",\n".join([f"{item['factoid']}" for item in factoids[ci_str]]) + "]" for ci_str in factoids.keys()}
+        #prompt_tokens = [get_prompt_token(p, entity_system_prompt, self.tokenizer) for p in factoid_prompts.values()]
+
+        for ci, ci_str in enumerate(factoids.keys()):
+            for fi, fobj in enumerate(factoids[ci_str]):
+                factoid_prompt = entity_instruction_prompt + f"\nFactoid: {fobj['factoid']}"
+                prompt_token = [get_prompt_token(factoid_prompt, entity_system_prompt, self.tokenizer)]
+                eoutputs = execute_LLM_tasks(self.llm, prompt_token, max_new_tokens = 4096, temperature = 0.6, top_p = 0.9)
+                esummary = eoutputs[0].outputs[0].text.strip()
+                print('generated response: ', esummary)
+                out = extract_json_array_by_key(esummary, "entities")
+                if out:
+                    print('extracted response', out)
+                    factoids[ci_str][fi]['entities'] = out
+                else:
+                    factoids[ci_str][fi]['entities'] = []
+        return factoids
+    
+    def __generate_citations_for_factoids(self, chunks, factoids):
+
+        citation_instruction_prompt = """
+        Given a factoid, and chunk of text identify and extract the exact sentence or passage from the chunk of text (citation) that was used to construct the factoid.
+        
+        ### Input Format:
+        - Text: <chunk of text>
+        - Factoid: <factoid text>
+
+        ### Output Format (JSON):
+        {
+            "citation": <citation_text>
+        }
+
+        ### Input for your task:
+        """
+        citation_system_prompt = "You are a helpful assistant, that given a factoid and a chunk, extracts citation from the chunk of text used to make the factoid."
+
+        for ci,co in enumerate(chunks):
+            ci_str = str(co['chunk_index'])
+            print('res ci', type(ci_str))
+            if ci_str in factoids:
+                print('res factoids', factoids[ci_str])
+                for fi, fobj in enumerate(factoids[ci_str]):
+                    factoid_prompt = citation_instruction_prompt + f"\nText: {co['text']}\nFactoid: {fobj['factoid']}"
+                    prompt_token = [get_prompt_token(factoid_prompt, citation_system_prompt, self.tokenizer)]
+                    coutputs = execute_LLM_tasks(self.llm, prompt_token, max_new_tokens = 4096, temperature = 0.6, top_p = 0.9)
+                    esummary = coutputs[0].outputs[0].text.strip()
+                    print('generated response: ', esummary)
+                    out = extract_json_text_by_key(esummary, "citation")
+                    if out:
+                        print('extracted response', out)
+                        factoids[ci_str][fi]['citation'] = out['citation']
+                    else:
+                        factoids[ci_str][fi]['citation'] = ''
+        return factoids
 
     def __generate_factoids_from_all_chunks(self, chunks, topic):
         instruction_prompt = """
-        Given a text and a topic, extract verifiable factoids from it related to the topic, accompanied by an exact citation.  A factoid is a discrete, factual statement about the topic, ideally something that could be supported with a citation.
+        Given a text and a topic, extract verifiable factoids from it related to the topic.  A factoid is a discrete, factual statement about the topic.
 
         ### Generation guidelines:
         - **No opinions, adjectives, elaborations or extra details**
         - Each factoid must be standalone, verifiable statement.
-        - Each factoid must be accompanied by an exact citation i.e a direct quote or short excerpt from the given text that supports the factoid.
         - Extract any numeric information which is relevant. If there is data in a text based table, extract the relevant data.
         - Use concise, standalone statements, in English.
         - Focus only on information related to the provided topic.
@@ -115,10 +192,9 @@ class FactoidGen:
         "Company X is currently involved in a class action lawsuit filed in March 2023 concerning alleged violations of securities laws. The case is pending in the U.S. District Court for the Southern District of New York. No financial settlement has been reached as of the filing date."
 
         Output (JSON):
-        "factoids": [{
-            "factoid": "Company X is facing a class action lawsuit related to alleged securities law violations.",
-            "citation": "Company X is currently involved in a class action lawsuit filed in March 2023 concerning alleged violations of securities laws."
-        }]
+        "factoids": [
+            "Company X is facing a class action lawsuit related to alleged securities law violations.",
+        ]
         
         ### Now process the input:
         """
@@ -130,20 +206,20 @@ class FactoidGen:
             print(f'\nProcessing chunk batch {i}')
             chunk_batch = chunks[i:(i+CHUNK_BATCH_SIZE)]
             chunk_to_prompts = {f'{chunk["chunk_index"]}': instruction_prompt + f"\nTopic: {topic}\nText chunk: {chunk['text']}" for chunk in chunk_batch}
-            prompt_tokens = [get_prompt_token(p, factoid_system_prompt, self.model_name) for p in chunk_to_prompts.values()]
+            prompt_tokens = [get_prompt_token(p, factoid_system_prompt, self.tokenizer) for p in chunk_to_prompts.values()]
             outputs = execute_LLM_tasks(self.llm, prompt_tokens, max_new_tokens=4096, temperature=0.7, top_p=0.9)
             res = {}
             for j, o in zip(chunk_to_prompts.keys(), outputs):
                 print(f'generated response for chunk {j}: ', o.outputs[0].text.strip())
                 out = self.__extract_and_clean_factoids(o.outputs[0].text.strip())
                 if out:
-                    res[j] = out
+                    res[j] = [{ 'factoid': fstr } for fstr in out]
             print('resulting factoids', res, len(res.keys()))
             all_res = all_res | res
-        for i in range(0, len(chunks), CHUNK_BATCH_SIZE):
-            chunk_batch = chunks[i:(i+CHUNK_BATCH_SIZE)]
 
         print('dict len', len(all_res.keys()))
+        all_res = self.__generate_citations_for_factoids(chunks, all_res)
+        all_res = self.__generate_entities_from_factoids(all_res)
         return all_res
 
     def generate_factoids(self, topic_index):
@@ -182,7 +258,7 @@ class FactoidGen:
                     existing_factoids = []
                 if SEED_METADATA_TOPICS[topic_index] not in existing_topics:
                     existing_topics.append(SEED_METADATA_TOPICS[topic_index])
-                chunk_facts = [{ 'topic': SEED_METADATA_TOPICS[topic_index], 'factoid': factoid_cit['factoid'], 'citation': factoid_cit['citation'] } for factoid_cit in chunk_factoids[f'{i}']]
+                chunk_facts = [{ 'topic': SEED_METADATA_TOPICS[topic_index], 'factoid': factoid_cit['factoid'], 'citation': factoid_cit['citation'], 'entities': factoid_cit['entities'] } for factoid_cit in chunk_factoids[f'{i}'] if ((len(factoid_cit['entities']) > 0) and (factoid_cit['citation'] != ""))]
                 existing_factoids.extend(chunk_facts)
                 chunk_resp = {
                     'chunk_index': i,
@@ -225,9 +301,9 @@ if __name__ == "__main__":
     torch.cuda.init()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_index', type=int, default = 7, required = False)
+    parser.add_argument('--model_index', type=int, default = 6, required = False)
     parser.add_argument('--topic_index', type=int, default = 0, required = False)
-    parser.add_argument('--filename', type=str, required = True)
+    parser.add_argument('--filename', type=str, default = '10-K_NVDA_20240128', required = False)
 
     args = parser.parse_args()
 

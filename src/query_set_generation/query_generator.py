@@ -117,6 +117,24 @@ class QueryGenerator:
             #tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
         else:
             raise SystemExit('Invalid model index passed!')
+        
+    def __entity_identifier(self, fact_doc_text, metadata):
+        entity_identification_prompt = """
+        ### Task:
+        Given a list of factoids below, identify important all significant entities or "nouns" described in the factoids.
+        This should include but not limited to:
+        - Object: Any concrete object that is referenced by the provided content.
+        - Organization: Any organization working with the main company either on permanent or temporary basis on some contracts.
+        - Concepts: Any significant abstract ideas or themes that are central to the article's discussion.
+
+        ### Input Format:
+        - Factoids: [<list of factoids>]
+
+        ### Output Format (JSON):
+        "entities": [<list of entities recognized from factoids>]
+
+        ### Input for your task:
+        """
 
     def __generate_queries(self, fact_doc_text, metadata):
 
@@ -259,7 +277,7 @@ class QueryGenerator:
         gc.collect()
         torch.cuda.empty_cache()
         print('Completed destruction...exiting...')
-        #os._exit(0)
+        os._exit(0)
 
 if __name__ == "__main__":
     st = time()
@@ -294,8 +312,7 @@ if __name__ == "__main__":
         query_gen.generate_query(no_of_qstns = args.no_of_qstns, topic_index = args.topic_index)
         print(f'Finished generating questions for topic: {SEED_METADATA_TOPICS[args.topic_index]}')
 
-    query_gen.destroy()
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout
     log_file.close()
-    os._exit(0)
+    query_gen.destroy()
