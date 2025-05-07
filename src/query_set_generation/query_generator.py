@@ -10,9 +10,10 @@ import argparse
 import gc
 from google import genai
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+from together import Together
 
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer
+from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
 
 
 
@@ -35,7 +36,8 @@ MODELS = [
     "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int8",
     "Qwen/QwQ-32B-AWQ",
     "meta-llama/Meta-Llama-3.3-70B-Instruct",
-    "gemini-2.0-flash"
+    "gemini-2.0-flash",
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
 ]
 
 SEED_METADATA_TOPICS = [
@@ -95,7 +97,7 @@ class QueryGenerator:
                 api_key = cfg["google_api_keys"]["vinitramk1"]
             )
             self.model_folder = "gemini"
-        elif "Llama-3.3-70B" in self.model_name:
+        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
             model_path = "/datasets/ai/llama3/hub/models--meta-llama--Llama-3.3-70B-Instruct/snapshots/6f6073b423013f6a7d4d9f39144961bfbfbc386b"
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
@@ -115,27 +117,12 @@ class QueryGenerator:
             self.model_folder = "llama"
             self.tokenizer = get_tokenizer(self.model_name)
             #tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
+        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
+            self.llm = Together()
+            self.model_folder = "llama"
         else:
             raise SystemExit('Invalid model index passed!')
         
-    def __entity_identifier(self, fact_doc_text, metadata):
-        entity_identification_prompt = """
-        ### Task:
-        Given a list of factoids below, identify important all significant entities or "nouns" described in the factoids.
-        This should include but not limited to:
-        - Object: Any concrete object that is referenced by the provided content.
-        - Organization: Any organization working with the main company either on permanent or temporary basis on some contracts.
-        - Concepts: Any significant abstract ideas or themes that are central to the article's discussion.
-
-        ### Input Format:
-        - Factoids: [<list of factoids>]
-
-        ### Output Format (JSON):
-        "entities": [<list of entities recognized from factoids>]
-
-        ### Input for your task:
-        """
-
     def __generate_queries(self, fact_doc_text, metadata):
 
         qstn_instruction_prompt = """
@@ -187,7 +174,7 @@ class QueryGenerator:
             qjson = extract_json_text_by_key(qsummary, "query")
             if qjson != None and "query" in qjson and is_valid_sentence(qjson["query"], 100):
                 query_strs.append(qjson["query"])
-        elif "Llama-3.3-70B" in self.model_name:
+        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
             qstn_prompt_tokens = self.tokenizer([get_prompt_token(qstn_instruction_prompt, qstn_system_prompt, self.tokenizer)], return_tensors = "pt").to(self.device)
             qoutputs = execute_llama_LLM_task(self.llm, qstn_prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
             for j,o in enumerate(qoutputs):
@@ -199,6 +186,12 @@ class QueryGenerator:
                     print('qjson', qjson)
                     if qjson != None and "query" in qjson and is_valid_sentence(qjson["query"], 100):
                         query_strs.append(qjson["query"])
+        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
+            qsummary = execute_llama_task_api(self.llm, qstn_instruction_prompt)
+            print('generated response: ', qsummary)
+            qjson = extract_json_text_by_key(qsummary, "query")
+            if qjson != None and "query" in qjson and is_valid_sentence(qjson["query"], 100):
+                query_strs.append(qjson["query"])
         else:
             qstn_prompt_tokens = [get_prompt_token(qstn_instruction_prompt, qstn_system_prompt, self.tokenizer)]
             qoutputs = execute_LLM_tasks(self.llm, qstn_prompt_tokens, self.model_name, max_new_tokens=3000, temperature=0.6, top_p=0.9)

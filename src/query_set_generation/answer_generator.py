@@ -10,9 +10,10 @@ import re
 import gc
 from google import genai
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+from together import Together
 
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer
+from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
 
 
 COMPANY_DICT = {
@@ -34,7 +35,8 @@ MODELS = [
     "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int8",
     "Qwen/QwQ-32B-AWQ",
     "meta-llama/Meta-Llama-3.3-70B-Instruct",
-    "gemini-2.0-flash"
+    "gemini-2.0-flash",
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
 ]
 
 SEED_METADATA_TOPICS = [
@@ -92,7 +94,7 @@ class AnswerGenerator:
                 api_key = cfg["google_api_keys"]["vinitramk4"]
             )
             self.model_folder = "gemini"
-        elif "Llama-3.3-70B" in self.model_name:
+        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
             model_path = "/datasets/ai/llama3/hub/models--meta-llama--Llama-3.3-70B-Instruct/snapshots/6f6073b423013f6a7d4d9f39144961bfbfbc386b"
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
@@ -111,6 +113,9 @@ class AnswerGenerator:
             )
             self.model_folder = "llama"
             self.tokenizer = get_tokenizer(self.model_name)
+        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
+            self.llm = Together()
+            self.model_folder = "llama"
         else:
             raise SystemExit('Invalid model index passed!')
 
@@ -357,7 +362,7 @@ class AnswerGenerator:
                         'query': zipped_qsnts_factoids[ai][0]['query'],
                         'groundings': zipped_qsnts_factoids[ai][1]['groundings']
                     })
-        elif "Llama-3.3-70B" in self.model_name:
+        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
             ans_system_prompt = "You are a helpful assistant, that given a query and list of groundings (citations related to the query), generates meaningful answer to the question."
             ans_prompt_tokens = self.tokenizer([get_prompt_token(ans_prompt_text, ans_system_prompt, self.tokenizer) for ans_prompt_text in ans_instruction_prompts], return_tensors = "pt", truncation = True, padding = True).to(self.device)
             aoutputs = execute_llama_LLM_task(self.llm, ans_prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
@@ -379,6 +384,23 @@ class AnswerGenerator:
                             'query': zqf[0]['query'],
                             'groundings': zqf[0]['groundings']
                         })
+        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
+            ans_system_prompt = "You are a helpful assistant, that given a query and list of groundings (citations related to the query), generates meaningful answer to the question."
+            for ai, ans_instruction in enumerate(ans_instruction_prompts):
+                asummary = execute_llama_task_api(self.llm, ans_instruction, ans_system_prompt)
+                print('generated response: ', asummary)
+                ajson = extract_json_text_by_key(asummary, "answer")
+                if ajson != None and "answer" in ajson:
+                    qna_pairs.append({
+                        'query': zipped_qsnts_factoids[ai][0]['query'],
+                        'answer': ajson['answer'],
+                        'groundings': zipped_qsnts_factoids[ai][0]['groundings']
+                    })
+                else:
+                    missed_qstns.append({
+                        'query': zipped_qsnts_factoids[ai][0]['query'],
+                        'groundings': zipped_qsnts_factoids[ai][0]['groundings']
+                    })
         else:
             ans_system_prompt = "You are a helpful assistant, that given a query and list of groundings (citations related to the query), generates meaningful answer to the question."
             ans_prompt_tokens = [get_prompt_token(ans_prompt_text, ans_system_prompt, self.tokenizer) for ans_prompt_text in ans_instruction_prompts]

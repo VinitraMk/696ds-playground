@@ -9,9 +9,10 @@ import argparse
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 import gc
 from google import genai
+from together import Together
 
 from utils.string_utils import extract_json_array_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer
+from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
 
 COMPANY_DICT = {
     'INTC': 'Intel Corp.',
@@ -32,7 +33,8 @@ MODELS = [
     "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int8",
     "Qwen/QwQ-32B-AWQ",
     "meta-llama/Meta-Llama-3.3-70B-Instruct",
-    "gemini-2.0-flash"
+    "gemini-2.0-flash",
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
 ]
 
 SEED_METADATA_TOPICS = [
@@ -90,7 +92,7 @@ class GroundingsGenerator:
                 api_key = cfg["google_api_keys"]["vinitramk1"]
             )
             self.model_folder = "gemini"
-        elif "Llama-3.3-70B" in self.model_name:
+        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
             model_path = "/datasets/ai/llama3/hub/models--meta-llama--Llama-3.3-70B-Instruct/snapshots/6f6073b423013f6a7d4d9f39144961bfbfbc386b"
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
@@ -109,6 +111,9 @@ class GroundingsGenerator:
             )
             self.model_folder = "llama"
             self.tokenizer = get_tokenizer(self.model_name)
+        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
+            self.llm = Together()
+            self.model_folder = "llama"
         else:
             raise SystemExit('Invalid model index passed!')
 
@@ -116,8 +121,8 @@ class GroundingsGenerator:
 
         grounding_instruction_prompt = """
         ### Task:
-        Analyze the provided question, set of factoids with their citations and the metadata about them, and generate groundings for the question and answer pair.
-        Groundings are citations of the factoids that support or are relevant to the question.
+        Analyze the provided question, set of factoids and the metadata about them, and generate groundings for the question and answer pair.
+        Groundings are factoids that support or are relevant to the question.
 
         ### Generation Rules
         - **Do not put gibberish, unnecessary, ellaborate adjectives and chinese characters** in your response for either question or the answer.
@@ -165,17 +170,22 @@ class GroundingsGenerator:
                 print(f'generated response for question: ', gsummary)
                 gjson_arr = extract_json_array_by_key(gsummary, "groundings")
                 if gjson_arr != None and len(gjson_arr) > 0:
+                    ground_citations = []
+                    for gc in gjson_arr:
+                        for fobj in zipped_query_factoids[gi][1]:
+                            if fobj['factoid'] == gc:
+                                ground_citations.append(fobj['citation'])
                     qna_pairs_gen.append({
                         "query": zipped_query_factoids[gi][0],
                         "factoids": zipped_query_factoids[gi][1],
-                        "groundings": gjson_arr
+                        "groundings": ground_citations
                     })
                 else:
                     missed_qna_pairs.append({
                         "query": zipped_query_factoids[gi][0],
                         "factoids": zipped_query_factoids[gi][1],
                     })
-        elif "Llama-3.3-70B" in self.model_name:
+        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
             grounding_system_prompt = "You are a helpful assistant that given a question and set of factoids & citations, returns groundings (citations supporting the answer)."
             grounding_prompt_tokens = self.tokenizer([get_prompt_token(grounding_instruction_prompt, grounding_system_prompt, self.tokenizer) for grounding_instruction_prompt in grounding_instruction_prompts], return_tensors = "pt", padding = True, truncation = True).to(self.device)
             goutputs = execute_llama_LLM_task(self.llm, grounding_prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
@@ -188,16 +198,45 @@ class GroundingsGenerator:
                     gjson_arr = extract_json_array_by_key(gsummary[ti:], "groundings")
                     print('qjson', gjson_arr)
                     if gjson_arr != None and len(gjson_arr) > 0:
+                        ground_citations = []
+                        for gc in gjson_arr:
+                            for fobj in zqf[1]:
+                                if fobj['factoid'] == gc:
+                                    ground_citations.append(fobj['citation'])
                         qna_pairs_gen.append({
                             "query": zqf[0],
                             "factoids": zqf[1],
-                            "groundings": gjson_arr
+                            "groundings": ground_citations 
                         })
                     else:
                         missed_qna_pairs.append({
                             "query": zqf[0],
                             "factoids": zqf[1]
                         })
+        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
+            grounding_system_prompt = "You are a helpful assistant that given a question and set of factoids & citations, returns groundings (citations supporting the answer)."
+            for gi, grounding_instruction in enumerate(grounding_instruction_prompts):
+                gsummary = execute_llama_task_api(self.llm, grounding_instruction, grounding_system_prompt)
+                print('generated response: ', gsummary)
+                gjson_arr = extract_json_array_by_key(gsummary, "groundings")
+                ground_citations = []
+                farr = factoids_arr_batch[gi]
+                if gjson_arr != None and len(gjson_arr) > 0:
+                    for gc in gjson_arr:
+                        for fobj in farr:
+                            if fobj['factoid'] == gc:
+                                ground_citations.append(fobj['citation'])
+
+                    qna_pairs_gen.append({
+                        "query": zipped_query_factoids[gi][0],
+                        "factoids": zipped_query_factoids[gi][1],
+                        "groundings": ground_citations
+                    })
+                else:
+                    missed_qna_pairs.append({
+                        "query": zipped_query_factoids[gi][0],
+                        "factoids": zipped_query_factoids[gi][1]
+                    })
         else:
             grounding_system_prompt = "You are a helpful assistant that given a question and set of factoids & citations, returns groundings (citations supporting the answer)."
             grounding_prompt_tokens = [get_prompt_token(gip, grounding_system_prompt, self.tokenizer) for gip in grounding_instruction_prompts]
@@ -208,10 +247,15 @@ class GroundingsGenerator:
                 print(f'generated response for question: ', gsummary)
                 gjson_arr = extract_json_array_by_key(gsummary, "groundings")
                 if gjson_arr != None and len(gjson_arr) > 0:
+                    ground_citations = []
+                    for gc in gjson_arr:
+                        for fobj in zqf[1]:
+                            if fobj['factoid'] == gc:
+                                ground_citations.append(fobj['citation'])
                     qna_pairs_gen.append({
                         "query": zqf[0],
                         "factoids": zqf[1],
-                        "groundings": gjson_arr
+                        "groundings": ground_citations 
                     })
                 else:
                     missed_qna_pairs.append({
@@ -254,7 +298,10 @@ class GroundingsGenerator:
             for bi,i in enumerate(range(0, len(filtered_queries), self.prompt_batch_size)):
                 query_strs = [qs['query'] for qs in filtered_queries[i:(i+self.prompt_batch_size)]]
                 factoids_arr_batch = [qs["factoids"] for qs in filtered_queries[i:(i+self.prompt_batch_size)]]
-                factoids_arr_str_batch = [json.dumps(qs, indent=4) for qs in factoids_arr_batch]
+                factoids_cit_batch = [[qo['factoid'] for qo in qs] for qs in factoids_arr_batch]
+                factoids_arr_str_batch = [",".join(qs) for qs in factoids_cit_batch]
+                #factoids_arr_str_batch = [",".join([fobj['factoid'] for fobj in arr]) for arr in factoids_arr_batch]
+                print(factoids_arr_str_batch[0], type(factoids_arr_str_batch[0]))
                 #factoids_doc_batch = [factoid_subarr_str + "]" for factoid_subarr_str in factoids_arr_str_batch]
                 print(f'\nRunning grounding generation for factoids batch {bi}')
                 qobjs, missed_qna_pairs = self.__generate_groundings(factoids_arr_str_batch, factoids_arr_batch, query_strs, metadata)

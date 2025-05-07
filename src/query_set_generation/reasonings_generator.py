@@ -10,9 +10,10 @@ import argparse
 import gc
 from google import genai
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+from together import Together
 
 from utils.string_utils import extract_json_array_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer
+from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
 
 COMPANY_DICT = {
     'INTC': 'Intel Corp.',
@@ -33,7 +34,8 @@ MODELS = [
     "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int8",
     "Qwen/QwQ-32B-AWQ",
     "meta-llama/Meta-Llama-3.3-70B-Instruct",
-    "gemini-2.0-flash"
+    "gemini-2.0-flash",
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
 ]
 
 SEED_METADATA_TOPICS = [
@@ -91,7 +93,7 @@ class ReasoningsGenerator:
                 api_key = cfg["google_api_keys"]["vinitramk1"]
             )
             self.model_folder = "gemini"
-        elif "Llama-3.3-70B" in self.model_name:
+        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
             model_path = "/datasets/ai/llama3/hub/models--meta-llama--Llama-3.3-70B-Instruct/snapshots/6f6073b423013f6a7d4d9f39144961bfbfbc386b"
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
@@ -110,6 +112,9 @@ class ReasoningsGenerator:
             )
             self.model_folder = "llama"
             self.tokenizer = get_tokenizer(self.model_name)
+        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
+            self.llm = Together()
+            self.model_folder = "llama"
         else:
             raise SystemExit('Invalid model index passed!')
 
@@ -190,7 +195,7 @@ class ReasoningsGenerator:
                         "answer": qnag_coll[ri]["answer"],
                         "groundings": qnag_coll[ri]["groundings"]
                     })
-        elif "Llama-3.3-70B" in self.model_name:
+        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
             reasoning_system_prompt = "You are a helpful assistant that given a Q&A pair and groundings, returns reasonings (explanation of why every grounding supports the answer)."
             reasoning_prompt_tokens = self.tokenizer([get_prompt_token(rip, reasoning_system_prompt, self.tokenizer) for rip in reasoning_instruction_prompts], return_tensors = "pt", padding = True, truncation = True).to(self.device)
             routputs = execute_llama_LLM_task(self.llm, reasoning_prompt_tokens, self.tokenizer, max_new_tokens=8192, temperature=0.6)
@@ -213,6 +218,24 @@ class ReasoningsGenerator:
                             "answer": zqf["answer"],
                             "groundings": zqf["groundings"]
                         })
+        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
+            reasoning_system_prompt = "You are a helpful assistant that given a Q&A pair and groundings, returns reasonings (explanation of why every grounding supports the answer)."
+            for ri, reasoning_prompt in enumerate(reasoning_instruction_prompts):
+                rsummary = execute_llama_task_api(self.llm, reasoning_prompt, reasoning_system_prompt)
+                rjson_arr = extract_json_array_by_key(rsummary, "reasonings")
+                if rjson_arr != None and len(rjson_arr) > 0:
+                    query_sets.append({
+                        "query": qnag_coll[ri]["query"],
+                        "answer": qnag_coll[ri]["answer"],
+                        "reasonings": rjson_arr,
+                        "groundings": qnag_coll[ri]["groundings"]
+                    })
+                else:
+                    missed_sets.append({
+                        "query": qnag_coll[ri]["query"],
+                        "answer": qnag_coll[ri]["answer"],
+                        "groundings": qnag_coll[ri]["groundings"]
+                    })
         else:
             reasoning_system_prompt = "You are a helpful assistant that given a Q&A pair and groundings, returns reasonings (explanation of why every grounding supports the answer)."
             reasoning_prompt_tokens = [get_prompt_token(rip, reasoning_system_prompt, self.tokenizer) for rip in reasoning_instruction_prompts]

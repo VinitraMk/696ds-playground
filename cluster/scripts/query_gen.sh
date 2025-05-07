@@ -11,4 +11,4 @@
 module load conda/latest
 conda activate /work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.conda/envs/vllm_env
 
-python -m src.query_set_generation.query_generator --model_index 6 --topic_index -1 --filename 10-K_AMD_20231230 --no_of_qstns 5 
+python -m src.query_set_generation.query_generator --model_index 10 --topic_index -1 --filename 10-K_NVDA_20240128 --no_of_qstns 5 
