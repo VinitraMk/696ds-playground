@@ -298,11 +298,11 @@ class AnswerGenerator:
 
         ans_instruction_prompt = """
         ### Task:
-        Analyze the provided question, list of groundings (citations from original documents) relevant to the question and metadata about the groudings and summarize an answer to the question.
+        Analyze the provided question, list of factoids relevant to the question and metadata about the groudings and summarize an answer to the question.
 
         ### Answer Generation Rules
         - **No opinions, adjectives, elaborations or extra details**
-        - Generated answer is ONLY from the given groundings, **do not** hallucinate new information or groundings to answer the query.
+        - Generated answer is ONLY from the given factoids, **do not** hallucinate new information or groundings to answer the query.
         - Return the final answer as one single concise paragraph in a json object. Use the example output as reference for structure.
         - **Do not put chinese characters** in your response. Return responses only in English.
         - Keep the generated answer concise and under 200 words.

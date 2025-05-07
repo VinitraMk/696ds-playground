@@ -187,7 +187,7 @@ class QueryGenerator:
                     if qjson != None and "query" in qjson and is_valid_sentence(qjson["query"], 100):
                         query_strs.append(qjson["query"])
         elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            qsummary = execute_llama_task_api(self.llm, qstn_instruction_prompt)
+            qsummary = execute_llama_task_api(self.llm, qstn_instruction_prompt, qstn_system_prompt)
             print('generated response: ', qsummary)
             qjson = extract_json_text_by_key(qsummary, "query")
             if qjson != None and "query" in qjson and is_valid_sentence(qjson["query"], 100):
