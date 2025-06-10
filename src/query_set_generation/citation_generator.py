@@ -192,12 +192,17 @@ class CitationGenerator:
         
         iquery_store_fp = f'intermediate_data/query_sets/{self.model_folder}/{self.filename}_generated_queries.json'
         chunk_store_fp = f'data/chunked_data/{self.filename}_chunked.json'
+        main_query_store_fp = f'data/queries/{self.model_folder}/{self.filename}_generated_queries.json'
 
         if os.path.exists(iquery_store_fp):
             with open(iquery_store_fp, 'r') as fp:
                 query_store = json.load(fp)
             query_arr = query_store["queries"]
             print('total no of queries formed: ', len(query_arr))
+
+            if os.path.exists(main_query_store_fp):
+                with open(main_query_store_fp, 'r') as fp:
+                    main_query_store = json.load(fp)
 
             with open (chunk_store_fp, 'r') as fp:
                 chunk_store = json.load(fp)["chunks"]
@@ -219,12 +224,17 @@ class CitationGenerator:
                             all_citations.extend(chunk_citations)
                             cited_chunks.append(ci)
                     filtered_queries[qi] = query_obj | { 'citations': all_citations, 'chunks_used': cited_chunks }
-                query_arr[entity] = filtered_queries                    
+                if entity in main_query_store["queries"]:
+                    main_query_store["queries"][entity].extend(filtered_queries)
+                else:
+                    main_query_store["queries"][entity] = filtered_queries
+                #query_arr[entity] = filtered_queries                    
 
-                query_store["queries"] = query_arr
+                #query_store["queries"] = query_arr
 
-                with open(iquery_store_fp, 'w') as fp:
-                    json.dump(query_store, fp) 
+                with open(main_query_store_fp, 'w') as fp:
+                    json.dump(main_query_store, fp)
+                os.remove(iquery_store_fp) # remove from intermediate storage after final dataset is constructed
         else:
             SystemExit('Chunk store not found!')
 

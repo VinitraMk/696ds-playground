@@ -8,3 +8,4 @@ config.json
 *.pyc
 **/__pycache__/
 figures/
+final_results/experiments/*
