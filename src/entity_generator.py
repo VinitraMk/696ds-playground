@@ -59,6 +59,9 @@ class EntityGen:
         
         print(f'Device enabled: {self.device}')
 
+        with open("./config.json", "r") as fp:
+            cfg = json.load(fp)
+
         # Load the model using vLLM
         self.model_name = MODELS[self.model_index]
         print('Model used: ', self.model_name)
@@ -93,7 +96,7 @@ class EntityGen:
             self.tokenizer = get_tokenizer(self.model_name)
             #tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
         elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            self.llm = Together()
+            self.llm = Together(api_key = cfg["togetherai_api_key"])
             self.model_folder = "llama"
         else:
             print('Invalid model name passed!')

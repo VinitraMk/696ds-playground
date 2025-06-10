@@ -114,7 +114,7 @@ class GroundingsGenerator:
             self.model_folder = "llama"
             self.tokenizer = get_tokenizer(self.model_name)
         elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            self.llm = Together()
+            self.llm = Together(api_key = cfg["togetherai_api_key"])
             self.model_folder = "llama"
         else:
             raise SystemExit('Invalid model index passed!')
@@ -267,7 +267,7 @@ class GroundingsGenerator:
             sampled_entity_keys = self.__sample_entities(entities_info=entity_store, count_range=(5, 25), k = 20)
             print('\nSampled entities: ', sampled_entity_keys)
             with open(sampled_entities_fp, 'w') as fp:
-                json.dump({ "sampled_entities": sampled_entity_keys })
+                json.dump({ "sampled_entities": sampled_entity_keys }, fp)
 
             for ek in sampled_entity_keys:
                 chunk_indices = entity_store[ek]["chunk_indices"]

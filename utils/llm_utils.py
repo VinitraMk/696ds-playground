@@ -65,5 +65,6 @@ def execute_llama_task_api(llm_model, prompt, system_prompt):
     response = llm_model.chat.completions.create(
         model = "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
         messages = messages,
+        temperature = 0.6
     )
     return response.choices[0].message.content
