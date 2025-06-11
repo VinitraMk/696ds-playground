@@ -193,6 +193,7 @@ class CitationGenerator:
         iquery_store_fp = f'intermediate_data/query_sets/{self.model_folder}/{self.filename}_generated_queries.json'
         chunk_store_fp = f'data/chunked_data/{self.filename}_chunked.json'
         main_query_store_fp = f'data/queries/{self.model_folder}/{self.filename}_generated_queries.json'
+        subpar_query_store_fp = f'data/queries/{self.model_folder}/{self.filename}_subpar_queries.json'
 
         if os.path.exists(iquery_store_fp):
             with open(iquery_store_fp, 'r') as fp:
@@ -203,6 +204,8 @@ class CitationGenerator:
             if os.path.exists(main_query_store_fp):
                 with open(main_query_store_fp, 'r') as fp:
                     main_query_store = json.load(fp)
+            else:
+                main_query_store = { "queries": {} }
 
             with open (chunk_store_fp, 'r') as fp:
                 chunk_store = json.load(fp)["chunks"]
@@ -210,6 +213,8 @@ class CitationGenerator:
             metadata = f'Company: {self.company_name} | SEC Filing: 10-K'
             print('\nStarting answer generation for batch of questions\n')
             sampled_entities = query_arr.keys()
+            print('\nSampled entities: ', sampled_entities)
+            less_hop_qstns = []
             for entity in sampled_entities:
                 filtered_queries = query_arr[entity]
                 for qi, query_obj in enumerate(filtered_queries):
@@ -223,6 +228,8 @@ class CitationGenerator:
                         if len(chunk_citations) > 0:
                             all_citations.extend(chunk_citations)
                             cited_chunks.append(ci)
+                    if len(cited_chunks) < 5:
+                        less_hop_qstns.append({ 'entity': entity, 'query': query_obj['query'], 'answer': query_obj['answer'], 'groundings': query_obj['groundings'], 'citations': all_citations, 'chunks_used': cited_chunks })
                     filtered_queries[qi] = query_obj | { 'citations': all_citations, 'chunks_used': cited_chunks }
                 if entity in main_query_store["queries"]:
                     main_query_store["queries"][entity].extend(filtered_queries)
@@ -231,10 +238,13 @@ class CitationGenerator:
                 #query_arr[entity] = filtered_queries                    
 
                 #query_store["queries"] = query_arr
+            print('\nNo of questions with less than 5 hops: ', len(less_hop_qstns))
 
-                with open(main_query_store_fp, 'w') as fp:
-                    json.dump(main_query_store, fp)
+            with open(main_query_store_fp, 'w') as fp:
+                json.dump(main_query_store, fp)
                 os.remove(iquery_store_fp) # remove from intermediate storage after final dataset is constructed
+            with open(subpar_query_store_fp, 'w') as fp:
+                json.dump({ "queries": less_hop_qstns}, fp)
         else:
             SystemExit('Chunk store not found!')
 

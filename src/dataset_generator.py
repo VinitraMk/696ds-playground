@@ -1,7 +1,7 @@
 import argparse
 from src.query_set_generation.query_generator import QueryGenerator
 from src.query_set_generation.answer_generator import AnswerGenerator
-from src.query_set_generation.groundings_generator import GroundingsGenerator
+from groundings_generator import GroundingsGenerator
 
 if __name__ == "__main__":
 

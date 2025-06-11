@@ -4,7 +4,7 @@ from vllm import LLM
 import multiprocessing
 import numpy as np
 import json
-from time import time
+from time import time, sleep
 import sys
 import argparse
 import gc
@@ -51,8 +51,8 @@ HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggin
 os.environ['HF_HOME'] = HF_CACHE_DIR
 
 RELEVANCE_THRESHOLD = 2.0
-MAX_GROUNDINGS_TO_SAMPLE = 50
-MIN_GROUNDINGS_NEEDED_FOR_GENERATION = 15
+MAX_GROUNDINGS_TO_SAMPLE = 25
+MIN_GROUNDINGS_NEEDED_FOR_GENERATION = 10
 NO_OF_TRIALS = 3
 FILENAMES = [
     '10-K_AMD_20231230',
@@ -217,7 +217,6 @@ class QueryGenerator:
         - Example question is just a benchmark for question complexity, but try to generate question more complex than that.
         - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response for either question or the answer.
         - **Do not put intermediate, thinking or reasonings steps in your response**
-        - Don't think for more than 2000 tokens
         - Use the example structure to return the final response.
         - **Do not copy example from the prompt** in your response.
 
@@ -232,7 +231,7 @@ class QueryGenerator:
         }
 
         ### Example Input
-        Metadata: Company name: Apple | SEC Filing: 10-K | Related Topic: Risk Factors and Challenges
+        Metadata: Company name: Apple | SEC Filing: 10-K
         Groundings: [
             "The 10-K filing notes that 'The Company’s business, results of operations and financial condition could be materially adversely affected by changes in global economic conditions.' It also states that 'The Company is subject to intense competition in all markets in which it operates,' highlighting exposure to industry dynamics. Apple points out reliance on third-party suppliers and manufacturers, stating, 'The Company depends on component and product manufacturing and logistical services provided by outsourcing partners.",
             "Net sales increased 8% or $29.3 billion during 2023 compared to 2022' indicates strong performance, particularly in the iPhone and Services segments. Apple adds, 'Research and development expense increased to $27.7 billion in 2023,' showing commitment to innovation. The filing explains margin variability with 'We expect gross margin to fluctuate in future periods, depending on a variety of factors, including product mix and component costs.",
@@ -345,6 +344,7 @@ class QueryGenerator:
                         query_strs = self.__generate_queries_in_single_prompt(groundings_str, metadata, entity)
                         all_resp[entity].extend([{'query': query_str, 'groundings': groundings_subarr, 'chunks_used': chunks_used } for query_str in query_strs])
                         print('no of valid qstns formed so far: ', len(all_resp[entity]))
+                        sleep(60)
                         if len(all_resp[entity]) >= no_of_qstns:
                             break
                     attempts += 1
