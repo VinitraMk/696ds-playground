@@ -60,11 +60,11 @@ def execute_llama_LLM_task(llm_model, prompts, tokenizer, max_new_tokens, temper
     responses = tokenizer.batch_decode(outputs, skip_special_tokens = True)
     return responses
 
-def execute_llama_task_api(llm_model, prompt, system_prompt):
+def execute_llama_task_api(llm_model, prompt, system_prompt, temperature = 0.6):
     messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}]
     response = llm_model.chat.completions.create(
         model = "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
         messages = messages,
-        temperature = 0.6
+        temperature = temperature
     )
     return response.choices[0].message.content

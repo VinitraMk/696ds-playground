@@ -88,7 +88,7 @@ def get_multi_hop_distribution_plot(query_store, plots_folder, filename):
 if __name__ == "__main__":
     filename = '10-K_NVDA_20240128'
     model_folder = 'llama'
-    expt_name = 'new-pipeline-iteration'
+    expt_name = 'single-grounding-per-entity-2'
     #expt_name = 'single-grounding-per-entity'
     #generated_dataset_path = f'data/queries/{model_folder}/{filename}_generated_queries.json'
     generated_dataset_path = f'final_results/experiments/exp-{expt_name}/{filename}_generated_queries.json'

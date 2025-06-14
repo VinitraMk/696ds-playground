@@ -127,18 +127,18 @@ class QueryGenerator:
 
         qstn_instruction_prompt = """
         ### Task:
-        Given a list of groundings (sentences related to given entity), entity and metadata, generate 5 complex questions that requires reasoning over multiple groundings.
+        Given a list of groundings (long summaries related to given entity), entity and metadata, generate 5 complex multi-hop questions that requires reasoning over multiple groundings.
 
         ### Generation Rules
-        - **Do not use chinese characters** in your response. Return responses in English only.
-        - Keep each of the generated query under 100 words.
-        - Make the question as complex as you can, requiring reasoning over multiple groundings.
+        - **Do not use non-English characters** in your response. Return responses in English only.
+        - Keep each of the generated query under 150 words.
+        - Make the question as complex as you can, requiring reasoning over multiple (or all) groundings.
+        - Generate the question, such that the answer for it should be formed by **summarizing multiple groundings (atleast 5 groundings or all groundings).**
+        - When generating the question, also try to make it relevant to the entity provided.
         - Example question is just a benchmark for question complexity, but try to generate question more complex than that.
         - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response for either question or the answer.
         - **Do not put intermediate, thinking or reasonings steps in your response**
-        - Don't think for more than 2000 tokens
-        - Use the example structure to return the final response.
-        - **Do not copy example from the prompt** in your response.
+        - Use the example structure to return the final response. **Do not copy example from the prompt** in your response.
 
         ### Input format:
         Metadata: <meta data of the main company upon which the groundings are based.>
@@ -149,7 +149,7 @@ class QueryGenerator:
         "queries": [<a list of complex questions generated from the given list of groundings>]
 
         ### Example Input
-        Metadata: Company name: Apple | SEC Filing: 10-K | Related Topic: Risk Factors and Challenges
+        Metadata: Company name: Apple | SEC Filing: 10-K
         Groundings: [
             "The 10-K filing notes that 'The Company’s business, results of operations and financial condition could be materially adversely affected by changes in global economic conditions.' It also states that 'The Company is subject to intense competition in all markets in which it operates,' highlighting exposure to industry dynamics. Apple points out reliance on third-party suppliers and manufacturers, stating, 'The Company depends on component and product manufacturing and logistical services provided by outsourcing partners.",
             "Net sales increased 8% or $29.3 billion during 2023 compared to 2022' indicates strong performance, particularly in the iPhone and Services segments. Apple adds, 'Research and development expense increased to $27.7 billion in 2023,' showing commitment to innovation. The filing explains margin variability with 'We expect gross margin to fluctuate in future periods, depending on a variety of factors, including product mix and component costs.",
@@ -173,10 +173,10 @@ class QueryGenerator:
             print(f'generated response for question: ', qsummary)
             qjson = extract_json_array_by_key(qsummary, "queries")
             if qjson != None and len(qjson) > 0:
-                query_strs = [qj for qj in qjson if is_valid_sentence(qj, 100)]
+                query_strs = [qj for qj in qjson if is_valid_sentence(qj, 150)]
         elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
             qstn_prompt_tokens = self.tokenizer([get_prompt_token(qstn_instruction_prompt, qstn_system_prompt, self.tokenizer)], return_tensors = "pt").to(self.device)
-            qoutputs = execute_llama_LLM_task(self.llm, qstn_prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
+            qoutputs = execute_llama_LLM_task(self.llm, qstn_prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.7)
             for j,o in enumerate(qoutputs):
                 qsummary = o
                 print(f'generated {j}th response for question: ', qsummary)
@@ -185,16 +185,16 @@ class QueryGenerator:
                     qjson = extract_json_array_by_key(qsummary[ti:], "queries")
                     print('qjson', qjson)
                     if qjson != None and len(qjson) > 0:
-                        query_strs = [qj for qj in qjson if is_valid_sentence(qj, 100)]
+                        query_strs = [qj for qj in qjson if is_valid_sentence(qj, 150)]
         elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            qsummary = execute_llama_task_api(self.llm, qstn_instruction_prompt, qstn_system_prompt)
+            qsummary = execute_llama_task_api(self.llm, qstn_instruction_prompt, qstn_system_prompt, 0.7)
             print('generated response: ', qsummary)
             qjson = extract_json_array_by_key(qsummary, "queries")
             if qjson != None and len(qjson) > 0:
-                query_strs = [qj for qj in qjson if is_valid_sentence(qj, 100)]
+                query_strs = [qj for qj in qjson if is_valid_sentence(qj, 150)]
         else:
             qstn_prompt_tokens = [get_prompt_token(qstn_instruction_prompt, qstn_system_prompt, self.tokenizer)]
-            qoutputs = execute_LLM_tasks(self.llm, qstn_prompt_tokens, self.model_name, max_new_tokens=3000, temperature=0.6, top_p=0.9)
+            qoutputs = execute_LLM_tasks(self.llm, qstn_prompt_tokens, self.model_name, max_new_tokens=4000, temperature=0.7, top_p=0.9)
             for j, o in enumerate(qoutputs):
                 qsummary = o.outputs[0].text.strip()
                 print(f'generated {j}th response for question: ', qsummary)
