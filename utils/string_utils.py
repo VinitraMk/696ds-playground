@@ -74,6 +74,27 @@ def extract_json_object_array_by_keys(text, required_keys):
         print(f"Error parsing JSON: {e}")
         return []
 
+def extract_json_object_by_key(text: str, key: str):
+    """
+    Extract a JSON/dictionary object from a string given a top-level key like 'evaluation'.
+    Returns the parsed dictionary or None if not found or malformed.
+    """
+    # Create a regex pattern that captures the content of the object after the key
+    pattern = rf'"{re.escape(key)}"\s*:\s*{{.*?}}'  # non-greedy match
+    match = re.search(pattern, text, re.DOTALL)
+
+    if not match:
+        return None
+
+    try:
+        # Add braces to make it a valid JSON string if needed
+        json_fragment = '{' + match.group(0) + '}'
+        parsed = json.loads(json_fragment)
+        return parsed.get(key)
+    except json.JSONDecodeError as e:
+        print(f"JSON parsing error: {e}")
+        return None
+
 def is_valid_sentence(sentence, word_count_limit = 100):
 
     sentence = sentence.strip()

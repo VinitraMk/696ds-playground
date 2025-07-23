@@ -2,7 +2,7 @@ import os
 import torch
 from vllm import LLM
 import json
-from time import time
+from time import time, sleep
 import sys
 import argparse
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
@@ -11,8 +11,10 @@ from google import genai
 from together import Together
 import random
 
-from utils.string_utils import extract_json_array_by_key, is_valid_sentence, extract_json_text_by_key
+from utils.string_utils import extract_json_array_by_key, is_valid_sentence, extract_json_text_by_key, extract_json_object_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
+from prompts.grounding_generation.grounding_prompts import GROUNDING_INSTRUCTION_PROMPT, GROUNDING_EVALUATION_PROMPT, GROUNDING_REFINEMENT_PROMPT
+
 
 COMPANY_DICT = {
     'INTC': 'Intel Corp.',
@@ -37,21 +39,10 @@ MODELS = [
     "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
 ]
 
-SEED_METADATA_TOPICS = [
-    "Risk Factors and Challenges",
-    "Financial Performance and Metrics",
-    "Business Operations, Strategy, and Market Positioning",
-    "Market Trends, Economic Environment, and Industry Dynamics"
-]
 
 HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
 os.environ['HF_HOME'] = HF_CACHE_DIR
 
-RELEVANCE_THRESHOLD = 2.0
-MAX_FACTOIDS_TO_SAMPLE = 25
-MIN_FACTOIDS_NEEDED_FOR_GENERATION = 15
-PROMPT_BATCH_SIZE = 1
-NO_OF_TRIALS = 3
 FILENAMES = [
     '10-K_AMD_20231230',
     '10-K_NVDA_20240128',
@@ -128,99 +119,109 @@ class GroundingsGenerator:
             clean_sentences = []
         return clean_sentences
 
+    def __get_output_from_llm(self, instruction_prompt, system_prompt, llm_config = None):
+        summary = ""
+        if self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
+            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
+            outputs = execute_llama_LLM_task(self.llm, prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
+            summary = outputs[0]
+            if "Input for your task" in summary:
+                ti = summary.index("Input for your task")
+                summary = summary[ti:]
+        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
+            summary = execute_llama_task_api(self.llm, instruction_prompt, system_prompt)
+            print('generated response: ', summary)
+        else:
+            prompt_tokens = [get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)]
+            outputs = execute_LLM_tasks(self.llm, prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
+            summary = outputs[0].outputs[0].text.strip()
+            print(f'generated response: ', summary)
+
+        return summary
+
     def __generate_groundings(self, chunk_texts, entity, metadata):
-
-        grounding_instruction_prompt = """
-        ### Task:
-        Analyze the provided chunk of text, the entity and the metadata about the text and generate a detailed 
-        summary about sentences from the chunk of text addressing the entity, directly or indirectly. This summary is called a grounding.
-
-        ### Generation Rules
-        - **Do not put gibberish, unnecessary, ellaborate adjectives and chinese characters** in your response for either question or the answer.
-        - **Do not put opinions, your intermediate reasoning steps used in forming the response**.
-        - The groundings can be short or long. The summary of the sentences related to the given entity (grounding) should be detailed and clear, covering
-        the necessary background or context around the sentences as well.
-        - Generate the grounding in as much detail as possible, but keep the grounding below 200 words.
-        - Phrase your response in **English only.**
-        - **Do not** generate completely new groundings that are not addressed in the given text.
-        - Use the example structure as reference to return the final response. **Do not copy example from the prompt** in your response.
-        - Return clean grounding with no typos, grammatical mistakes or erronuous punctuations.
-
-        ### Input format:
-        Text: <chunk of text from SEC filing>
-        Entity: <entity>
-        Metadata: <meta data of the main company from whose SEC 10-K filing the chunk of text is from>
-
-        ### Output format:
-        {
-            "grounding": <a long/short paragraph summarizing in detail about the entity addressed in the chunk>
-        }
-
-        ### Example:
-        {
-            "grounding": "Apple Inc.’s SEC 10-K filing outlines key financial, operational, and strategic details impacting its performance. The company acknowledges exposure to global economic volatility and intense competition across all markets, while also noting its reliance on third-party suppliers and logistics partners. In 2023, Apple reported an 8% increase in net sales, or $29.3 billion, driven by the iPhone and Services segments. Research and development expenses rose to $27.7 billion, reflecting its continued investment in innovation. The filing warns that gross margins may fluctuate due to factors like product mix and component costs. Apple reported $162.1 billion in cash, cash equivalents, and marketable securities as of September 30, 2023, and maintains that these reserves, along with cash generated from operations, will meet its liquidity needs. The company’s capital return program includes share repurchases and dividends. Apple also reaffirmed its goal of achieving carbon neutrality across its entire business by 2030, with initiatives focused on emissions reduction, recycled materials, and sustainable product design. Additionally, the filing notes the company’s global tax obligations and involvement in legal proceedings, including antitrust investigations, which could impact its financial and operational outcomes. Overall, Apple presents a financially resilient but closely regulated and globally integrated business."
-        }
-        
-        ### Input for your task:
-        """
+        grounding_instruction_prompt = GROUNDING_INSTRUCTION_PROMPT
 
         grounding_instruction_prompts = [grounding_instruction_prompt + f"\nText: {chunk['text']}\nEntity: {entity}\nMetadata: {metadata}" for chunk in chunk_texts]
         groundings_set = {}
-        if "gemini" in self.model_name:
-            for gi, grounding_instruction_prompt in enumerate(grounding_instruction_prompts):
-                gsummary = execute_gemini_LLM_task(self.llm, grounding_instruction_prompt)
-                print(f'generated response for question: ', gsummary)
-                gjson = extract_json_text_by_key(gsummary, "grounding")
-                if gjson != None and "grounding" in gjson:
-                    groundings_set[chunk_texts[gi]['chunk_index']] = { 'text': gjson['grounding'], 'entity': entity } 
-        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
-            grounding_system_prompt = "You are a helpful assistant that given a question and set of factoids & citations, returns groundings (citations supporting the answer)."
-            grounding_prompt_tokens = self.tokenizer([get_prompt_token(grounding_instruction_prompt, grounding_system_prompt, self.tokenizer) for grounding_instruction_prompt in grounding_instruction_prompts], return_tensors = "pt", padding = True, truncation = True).to(self.device)
-            goutputs = execute_llama_LLM_task(self.llm, grounding_prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
-            #print('test response llama', goutputs[0])
-            for gi,o in enumerate(goutputs):
-                gsummary = o
-                print(f'generated response for question: ', gsummary)
-                if "Input for your task" in gsummary:
-                    ti = gsummary.index("Input for your task")
-                    gjson = extract_json_text_by_key(gsummary[ti:], "grounding")
-                    print('gjson', gjson)
-                    if gjson != None and "grounding" in gjson: 
-                        groundings_set[chunk_texts[gi]['chunk_index']] = { 'text': gjson['grounding'], 'entity': entity }
-        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            grounding_system_prompt = "You are a helpful assistant that given a question and set of factoids & citations, returns groundings (citations supporting the answer)."
-            for gi, grounding_instruction in enumerate(grounding_instruction_prompts):
-                groundings = []
-                gsummary = execute_llama_task_api(self.llm, grounding_instruction, grounding_system_prompt)
-                print('generated response: ', gsummary)
-                gjson = extract_json_text_by_key(gsummary, "grounding")
-                if gjson != None and "grounding" in gjson:
-                    groundings_set[chunk_texts[gi]['chunk_index']] = {'text': gjson['grounding'], 'entity': entity }
-        else:
-            grounding_system_prompt = "You are a helpful assistant that given a question and set of factoids & citations, returns groundings (citations supporting the answer)."
-            grounding_prompt_tokens = [get_prompt_token(gip, grounding_system_prompt, self.tokenizer) for gip in grounding_instruction_prompts]
-            goutputs = execute_LLM_tasks(self.llm, grounding_prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
 
-            for gi, o in enumerate(goutputs):
-                gsummary = o.outputs[0].text.strip()
-                print(f'generated response for question: ', gsummary)
-                gjson = extract_json_array_by_key(gsummary, "grounding")
-                if gjson != None and "grounding" in gjson and is_valid_sentence(gjson, 200):
-                    groundings_set[chunk_texts[gi]['chunk_index']] = { 'text': gjson['grounding'], 'entity': entity }
+        for gi, grounding_instruction_prompt in enumerate(grounding_instruction_prompts):
+            groundings = []
+
+            #initial groundings
+            grounding_system_prompt = "You are a helpful assistant that given a chunk of text, an entity and some metadata about the text, returns groundings which are summarized statements related to the entity."
+            gsummary = self.__get_output_from_llm(grounding_instruction_prompt, grounding_system_prompt)
+
+            gjson_arr = extract_json_array_by_key(gsummary, "groundings")
+
+            # grounding evaluation and refinement
+            if gjson_arr != None and len(gjson_arr) > 0:
+                gjson_arr_improved = gjson_arr
+                gjson_arr_best = gjson_arr
+
+                grounding_str = ",".join(gjson_arr_best)
+                evaluation_system_prompt = "You are a helpful assistant that given a chunk of text, an entity, some metadata about the text and groundings which which are summarized statements related to the entity, returns an evaluation of the quality of the grounding."
+                eval_prompt = GROUNDING_EVALUATION_PROMPT
+                eval_prompt_text = eval_prompt.format(entity = entity,
+                    chunk = chunk_texts[gi]['text'],
+                    metadata = metadata,
+                    groundings = grounding_str)
+
+                esummary = self.__get_output_from_llm(eval_prompt_text, evaluation_system_prompt)
+                evaluation_obj = extract_json_object_by_key(esummary, "evaluation")
+                eval_best = evaluation_obj
+                ts = evaluation_obj['entity_relevance'] + evaluation_obj['source_faithfulness'] + evaluation_obj['key_info_coverage'] + evaluation_obj['numeric_recall'] + evaluation_obj['non_redundancy']
+
+                tsmax = ts
+                no_of_attempts = 0
+                while tsmax < 5 and no_of_attempts < 3:
+                    
+                    # grounding refinement
+                    grounding_str = ",".join(gjson_arr_best)
+                    eval_str = str(eval_best)
+                    grounding_refinement_prompt = GROUNDING_REFINEMENT_PROMPT + f"\nText: {chunk_text}\nEntity: {entity}\nMetadata: {metadata}\nGroundings: {grounding_str}\nEvaluation: {eval_str}"
+                    grounding_refinement_system_prompt = "You are a helpful assistant that given a chunk of text, an entity, some metadata about the text, groundings which are summarized statements related to the entity and their evaluation, returns an improved set of groundings"rounding_system_prompt = "You are a helpful assistant that given a chunk of text, an entity, some metadata about the text, groundings which are summarized statements related to the entity and their evaluation, returns an improved set of groundings"
+                    grsummary = self.__get_output_from_llm(grounding_refinement_prompt, grounding_refinement_system_prompt)
+                    gjson_arr_improved = extract_json_array_by_key(grsummary, "groundings")
+
+                    # refined grounding evaluation
+                    grounding_str = ",".join(gjson_arr_improved)
+                    eval_prompt = GROUNDING_EVALUATION_PROMPT
+                    eval_prompt_text = eval_prompt.format(entity = entity,
+                        chunk = chunk_texts[gi]['text'],
+                        metadata = metadata,
+                        groundings = grounding_str)
+                    esummary = self.__get_output_from_llm(eval_prompt_text, evaluation_system_prompt)
+                    evaluation_obj = extract_json_object_by_key(esummary, "evaluation")
+                    ts = evaluation_obj['entity_relevance'] + evaluation_obj['source_faithfulness'] + evaluation_obj['key_info_coverage'] + evaluation_obj['numeric_recall'] + evaluation_obj['non_redundancy']
+                    if ts > tsmax:
+                        tsmax = ts
+                        gjson_arr_best = gjson_arr_improved
+                        eval_best = evaluation_obj
+                    no_of_attempts+=1
+                    sleep(60)
+
+                # best grounding cleanup
+                if gjson_arr_best!= None and len(gjson_arr_best) > 0:
+                    clean_g = self.__extract_and_clean_groundings(gjson_arr_best)
+                    for gc in clean_g:
+                        groundings.append({'text': gc, 'entity': entity})
+            
+            groundings_set[chunk_texts[gi]['chunk_index']] = groundings
 
         return groundings_set
-    
-    
+
     def __sample_entities(self, entities_info, count_range = (5, 15), k = 10):
         relevant_entities = {ek: entities_info[ek] for ek in entities_info.keys() if (ek not in IGNORE_ENTITIES) and (entities_info[ek]['count'] >= count_range[0]) and (entities_info[ek]['count'] <= count_range[1])}
-        sampled_entities = random.sample(relevant_entities.keys(), k)
+        min_k = min(len(relevant_entities), k)
+        sampled_entities = random.sample(relevant_entities.keys(), min_k)
         return sampled_entities
 
     def set_filename(self, filename):
         self.filename = filename
         self.company_name = COMPANY_DICT[filename.split('_')[1]]
 
-    def generate_groundings(self):
+    def generate_groundings(self, skip_entity_sampling = False):
 
 
         chunk_store_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{self.filename}_chunk_store.json'
@@ -242,25 +243,42 @@ class GroundingsGenerator:
 
             metadata = f'Company: {self.company_name} | SEC Filing: 10-K'
             print('\nStarting grounding generation for each chunk\n')
-
-            sampled_entity_keys = self.__sample_entities(entities_info=entity_store, count_range=(5, 20), k = 20)
-            print('\nSampled entities: ', sampled_entity_keys)
-            with open(sampled_entities_fp, 'w') as fp:
-                json.dump({ "sampled_entities": sampled_entity_keys }, fp)
-
+            
+            if not(skip_entity_sampling):
+                sampled_entity_keys = self.__sample_entities(entities_info=entity_store, count_range=(5, 20), k = 20)
+                print('\nSampled entities: ', sampled_entity_keys)
+                with open(sampled_entities_fp, 'w') as fp:
+                    json.dump({ "sampled_entities": sampled_entity_keys }, fp)
+            else:
+                with open(sampled_entities_fp, 'r') as fp:
+                    sampled_entity_keys = json.load(fp)["sampled_entities"]
+            if os.path.exists('../status.json'):
+                with open('../status.json', 'r') as fp:
+                    groundings_status_info = json.load(fp)
+            else:
+                groundings_status_info = {}
             for ek in sampled_entity_keys:
+                if ek in groundings_status_info and groundings_status_info[ek] == "completed":
+                    continue
                 chunk_indices = entity_store[ek]["chunk_indices"]
                 #chunk_entities = chunk_store_arr[ci]['entities']
+                print(f'No of chunks for entity {ek}: ', len(chunk_indices))
                 for cix in range(0, len(chunk_indices), self.prompt_batch_size):
                     cix_batch = chunk_indices[cix:cix+self.prompt_batch_size]
                     chunk_texts = [{ 'chunk_index': ci, 'text': chunk_arr[ci]} for ci in cix_batch]
                     entity_groundings = self.__generate_groundings(chunk_texts = chunk_texts, entity=ek, metadata=metadata)
                     for ci in cix_batch:
-                        chunk_store_arr[ci]['groundings'] = [entity_groundings[ci]]
-                        
-            chunk_store["chunks"] = chunk_store_arr
-            with open(chunk_store_fp, 'w') as fp:
-                json.dump(chunk_store, fp) 
+                        print(f'Grounding for {ek} in chunk {ci}: ', entity_groundings[ci])
+                        if 'groundings' in chunk_store_arr[ci]:
+                            chunk_store_arr[ci]['groundings'].extend(entity_groundings[ci])
+                        else:
+                            chunk_store_arr[ci]['groundings'] = entity_groundings[ci]
+                chunk_store["chunks"] = chunk_store_arr
+                with open(chunk_store_fp, 'w') as fp:
+                    json.dump(chunk_store, fp)
+            groundings_status_info = {}
+            with open('../status.json', 'w') as fp:
+                json.dump(groundings_status_info, fp)
         else:
             raise SystemExit('Chunk store not found!')
 
@@ -284,6 +302,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_index', type=int, default = 6, required = False)
     parser.add_argument('--filename', type = str, default = '10-K_NVDA_20240128', required = False)
+    parser.add_argument('--skip_entity_sampling', type = bool, default = False, required = False)
     parser.add_argument('--prompt_batch_size', type = int, default = 1, required = False)
 
     args = parser.parse_args()
@@ -291,7 +310,7 @@ if __name__ == "__main__":
     ground_gen = GroundingsGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size)
     print(f'\n\nGenerating groundings for file: {args.filename}')
     ground_gen.set_filename(args.filename)
-    ground_gen.generate_groundings()
+    ground_gen.generate_groundings(skip_entity_sampling = args.skip_entity_sampling)
 
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout

@@ -24,6 +24,27 @@ def extract_json_text_by_key(raw_text, target_key):
             return None
     return None
 
+def extract_json_object_by_key(text: str, key: str):
+    """
+    Extract a JSON/dictionary object from a string given a top-level key like 'evaluation'.
+    Returns the parsed dictionary or None if not found or malformed.
+    """
+    # Create a regex pattern that captures the content of the object after the key
+    pattern = rf'"{re.escape(key)}"\s*:\s*{{.*?}}'  # non-greedy match
+    match = re.search(pattern, text, re.DOTALL)
+
+    if not match:
+        return None
+
+    try:
+        # Add braces to make it a valid JSON string if needed
+        json_fragment = '{' + match.group(0) + '}'
+        parsed = json.loads(json_fragment)
+        return parsed.get(key)
+    except json.JSONDecodeError as e:
+        print(f"JSON parsing error: {e}")
+        return None
+
 #text = """1. In 2023, 2022, and 2021, the company reported earnings increases for their investments totaling \$16M, \$14M, and \$6M consecutively.
    
 #2. By end-of-year reports up until Decemeber 30th, 2023; there has been no change noted regarding receivable amounts owed specifically towards joint venture projects involving THASIC since they remain null across both fiscal periods mentioned here i.e., ending dates being either december last day before newyear OR afternewyearsday depending if leap yr applies not sure though but just saying "as per records" so yeah same thing really lol jkjk actually meant decembe rlast days pre post ny etc ok moving forward...
@@ -45,8 +66,23 @@ Answer: {
 }
 
 """
-#print(text)
-ti = text.index('Answer: ') + 8
-print(text[ti:])
+
+text = """
+Evaluation: {
+            "evaluation": {
+                "entity_relevance": 1,
+                "source_faithfulness": 1,
+                "key_info_coverage": 1,
+                "numeric_recall": 0,
+                "non_redundancy": 1,
+                "total_score": 4,
+                "justification": "The groundings are highly relevant to the entity 'Technologies' and accurately reflect the content of the chunk and metadata. They cover key points such as the importance of adapting to changes in technology, the need for research and development, and the company's efforts to provide innovative technologies. However, they lack specific numeric details, which is the only criterion not fully met."
+            }
+        }
+
+""" 
+print(text)
+#ti = text.index('Answer: ') + 8
+#print(text[ti:])
 #print(__extract_numbered_bullets(text))
-print(extract_json_text_by_key(text, "answer"))
+print(extract_json_object_by_key(text, "evaluation"))

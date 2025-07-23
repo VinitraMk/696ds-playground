@@ -321,6 +321,7 @@ class QueryGenerator:
             metadata = f'Company: {self.company_name} | SEC Filing: 10-K'
             all_resp = {}
             print('\nStarting query generation for batch of factoids\n')
+            total_q = 0
             for entity in sampled_entities:
                 attempts = 0
                 all_resp[entity] = []
@@ -331,6 +332,7 @@ class QueryGenerator:
                     rel_groundings = [{'chunk_index': ci, 'entity': entity, 'text': gr['text'] } for gr in gobj['groundings'] if gr['entity'] == entity]
                     filtered_groundings.extend(rel_groundings)
 
+                print(f'No of groundings under entity {entity}: ', len(filtered_groundings))
 
                 if multiple_in_single_prompt:
                     for fbi,i in enumerate(range(0, len(filtered_groundings), MAX_GROUNDINGS_TO_SAMPLE)):
@@ -340,10 +342,11 @@ class QueryGenerator:
                             groundings_subarr = filtered_groundings[-max_len:]
                         chunks_used = list(set([gobj['chunk_index'] for gobj in groundings_subarr]))
                         groundings_str = "[" + ",\n".join(f"{item['text']}" for item in groundings_subarr) + "]"
-                        print(f'\nRunning query  generation for factoids batch {fbi}')
+                        print(f'\nRunning query  generation for entity: ', entity)
                         query_strs = self.__generate_queries_in_single_prompt(groundings_str, metadata, entity)
+                        print(f'No of queries formed using entity {entity}: ', len(all_resp[entity]))
+                        total_q += len(query_strs)
                         all_resp[entity].extend([{'query': query_str, 'groundings': groundings_subarr, 'chunks_used': chunks_used } for query_str in query_strs])
-                        print('no of valid qstns formed so far: ', len(all_resp[entity]))
                         sleep(60)
                         if len(all_resp[entity]) >= no_of_qstns:
                             break
@@ -359,8 +362,9 @@ class QueryGenerator:
                                 groundings_subarr = filtered_groundings[-max_len:]
                             chunks_used = list(set([gobj['chunk_index'] for gobj in groundings_subarr]))
                             groundings_str = "[" + ",\n".join(f"{item['text']}" for item in groundings_subarr) + "]"
-                            print(f'\nRunning query  generation for factoids batch {fbi}')
+                            print(f'\nRunning query  generation for entity: ', entity)
                             query_strs = self.__generate_queries(groundings_str, metadata, entity)
+                            total_q += len(query_strs)
                             all_resp[entity].extend([{'query': query_str, 'groundings': groundings_subarr, 'chunks_used': chunks_used } for query_str in query_strs])
                             print('no of valid qstns formed so far: ', len(all_resp[entity]))
                             if len(all_resp[entity]) >= no_of_qstns:
@@ -368,6 +372,7 @@ class QueryGenerator:
                         attempts += 1
                         
             if all_resp != {}:
+                print('\nTotal no of questions generated: ', total_q)
                 iquery_json_path = f'./intermediate_data/query_sets/{self.model_folder}/{self.filename}_generated_queries.json'
                 queries = { 'queries': {} }
                 queries["queries"] = all_resp

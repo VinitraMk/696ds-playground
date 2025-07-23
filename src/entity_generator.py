@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 #custom imports
 from utils.string_utils import extract_json_array_by_key, is_valid_sentence, extract_json_object_array_by_keys, extract_json_text_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, get_tokenizer, execute_llama_task_api
+from prompts.entity_generation.entity_prompt import ENTITY_INSTRUCTION_PROMPT
 
 COMPANY_DICT = {
     'INTC': 'Intel Corp.',
@@ -37,18 +38,8 @@ MODELS = [
     "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
 ]
 
-SEED_METADATA_TOPICS = [
-    "Risk Factors and Challenges",
-    "Financial Performance and Metrics",
-    "Business Operations, Strategy, and Market Positioning",
-    "Market Trends, Economic Environment, and Industry Dynamics"
-]
-
 HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
 os.environ['HF_HOME'] = HF_CACHE_DIR
-
-RELEVANCE_THRESHOLD = 2.0
-CHUNK_BATCH_SIZE = 5
 
 class EntityGen:
 
@@ -113,31 +104,38 @@ class EntityGen:
             clean_factoids_citations = []
         return clean_factoids_citations
 
+    def __get_output_from_llm(self, instruction_prompt, system_prompt, llm_config = None):
+        summary = ""
+        if self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
+            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
+            outputs = execute_llama_LLM_task(self.llm, prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
+            summary = outputs[0]
+            if "Input for your task" in summary:
+                ti = summary.index("Input for your task")
+                summary = summary[ti:]
+        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
+            summary = execute_llama_task_api(self.llm, instruction_prompt, system_prompt)
+            print('generated response: ', summary)
+        else:
+            prompt_tokens = [get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)]
+            outputs = execute_LLM_tasks(self.llm, prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
+            summary = outputs[0].outputs[0].text.strip()
+            print(f'generated response: ', summary)
+
+        return summary
+
     def __generate_entities_from_chunk(self, chunks):
-        entity_instruction_prompt = """
-        Given a chunk of text, identify all significant entites or "nouns" described in each of the factoids.
-        This should include but not limited to:
-        - Object: Any concrete object that is referenced by the provided content.
-        - Organization: Any organization working with the main company either on permanent or temporary basis on some contracts.
-        - Concepts: Any significant abstract ideas or themes that are central to the factoids.
 
-        ### Input Format:
-        - Text: <factoid text>
-
-        ### Output Format (JSON):
-        "entities": ['entity 1', 'entity 2', ...]
-
-        ### Input for your task:
-        """
-        entity_system_prompt = "You are a helpful assistant, that given a chunk of text, generates entites addressed in the factoids."
+        entity_instruction_prompt = ENTITY_INSTRUCTION_PROMPT
+        
+        entity_system_prompt = "You are a helpful assistant, that given a chunk of text, generates entites addressed in the text."
         chunk_entities = []
         entity_info = {}
         entity_chunk_info = {}
 
         for ci,chunk in enumerate(chunks):
-            entity_prompt = entity_instruction_prompt + f"\nChunk: {chunk}"
-            esummary = execute_llama_task_api(self.llm, entity_prompt, entity_system_prompt)
-            print('generated response: ', esummary)
+            entity_prompt_text = entity_instruction_prompt + f"\nChunk: {chunk}"
+            esummary = self.__get_output_from_llm(entity_prompt_text, entity_system_prompt)
             ejson = extract_json_array_by_key(esummary, "entities")
             if ejson != None and len(ejson) > 0:
                 print(f'Entities from chunk {ci}:', ejson)

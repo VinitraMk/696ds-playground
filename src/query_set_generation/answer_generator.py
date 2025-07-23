@@ -323,7 +323,7 @@ class AnswerGenerator:
         - Generated answer is ONLY from the given groundings, **do not** hallucinate new information or groundings to answer the query.
         - Return the final answer in as much detail as possible, in a json object. Use the example output as reference for structure.
         - **Do not put non-English characters** in your response. Return responses only in English.
-        - Keep the generated answer detailed and clear but keep it under 300 words.
+        - Keep the generated answer detailed and clear but keep it under 400 words.
         - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response.
         - **Do not** put your chain of thought or reasoning steps in the response. Return **just the answer** in your final response.
         - **Do not copy example from the prompt** in your response.
@@ -430,7 +430,7 @@ class AnswerGenerator:
             with open(iquery_store_fp, 'r') as fp:
                 query_store = json.load(fp)
             query_arr = query_store["queries"]
-            print('total no of queries formed: ', len(query_arr))
+            print('total no of entities formed: ', len(query_arr))
 
             
             #chunk_topics = ",".join(chunk_obj["topics"])
