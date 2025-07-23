@@ -14,7 +14,7 @@ from together import Together
 
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
-
+from prompts.query_set_generation.question_prompt import QSTN_INSTRUCTION_PROMPT
 
 
 COMPANY_DICT = {
@@ -50,10 +50,6 @@ SEED_METADATA_TOPICS = [
 HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
 os.environ['HF_HOME'] = HF_CACHE_DIR
 
-RELEVANCE_THRESHOLD = 2.0
-MAX_GROUNDINGS_TO_SAMPLE = 25
-MIN_GROUNDINGS_NEEDED_FOR_GENERATION = 10
-NO_OF_TRIALS = 3
 FILENAMES = [
     '10-K_AMD_20231230',
     '10-K_NVDA_20240128',
@@ -122,177 +118,46 @@ class QueryGenerator:
             self.model_folder = "llama"
         else:
             raise SystemExit('Invalid model index passed!')
-        
+
+    def __get_output_from_llm(self, instruction_prompt, system_prompt, llm_config = None):
+        summary = ""
+        if self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
+            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
+            outputs = execute_llama_LLM_task(self.llm, prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
+            summary = outputs[0]
+            if "Input for your task" in summary:
+                ti = summary.index("Input for your task")
+                summary = summary[ti:]
+        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
+            summary = execute_llama_task_api(self.llm, instruction_prompt, system_prompt)
+            print('generated response: ', summary)
+        else:
+            prompt_tokens = [get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)]
+            outputs = execute_LLM_tasks(self.llm, prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
+            summary = outputs[0].outputs[0].text.strip()
+            print(f'generated response: ', summary)
+
+        return summary
+
     def __generate_queries_in_single_prompt(self, groundings_doc_text, metadata, entity):
 
-        qstn_instruction_prompt = """
-        ### Task:
-        Given a list of groundings (long summaries related to given entity), entity and metadata, generate 5 complex multi-hop questions that requires reasoning over multiple groundings.
-
-        ### Generation Rules
-        - **Do not use non-English characters** in your response. Return responses in English only.
-        - Keep each of the generated query under 150 words.
-        - Make the question as complex as you can, requiring reasoning over multiple (or all) groundings.
-        - Generate the question, such that the answer for it should be formed by **summarizing multiple groundings (atleast 5 groundings or all groundings).**
-        - When generating the question, also try to make it relevant to the entity provided.
-        - Example question is just a benchmark for question complexity, but try to generate question more complex than that.
-        - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response for either question or the answer.
-        - **Do not put intermediate, thinking or reasonings steps in your response**
-        - Use the example structure to return the final response. **Do not copy example from the prompt** in your response.
-
-        ### Input format:
-        Metadata: <meta data of the main company upon which the groundings are based.>
-        Groundings: [\<list of groundings\>]
-        Entity: <entity>
-
-        ### Output format:
-        "queries": [<a list of complex questions generated from the given list of groundings>]
-
-        ### Example Input
-        Metadata: Company name: Apple | SEC Filing: 10-K
-        Groundings: [
-            "The 10-K filing notes that 'The Company’s business, results of operations and financial condition could be materially adversely affected by changes in global economic conditions.' It also states that 'The Company is subject to intense competition in all markets in which it operates,' highlighting exposure to industry dynamics. Apple points out reliance on third-party suppliers and manufacturers, stating, 'The Company depends on component and product manufacturing and logistical services provided by outsourcing partners.",
-            "Net sales increased 8% or $29.3 billion during 2023 compared to 2022' indicates strong performance, particularly in the iPhone and Services segments. Apple adds, 'Research and development expense increased to $27.7 billion in 2023,' showing commitment to innovation. The filing explains margin variability with 'We expect gross margin to fluctuate in future periods, depending on a variety of factors, including product mix and component costs.",
-            "As of September 30, 2023, the Company’s cash, cash equivalents and marketable securities totaled $162.1 billion' signals substantial liquidity. Apple mentions capital allocation strategies in 'The Company’s capital return program includes both share repurchases and dividends.' The filing also adds, 'The Company believes its existing cash, cash equivalents and marketable securities, together with cash generated from operations, will be sufficient to meet its liquidity needs.",
-            "Apple outlines its sustainability goals with the statement 'The Company is committed to achieving carbon neutrality across its entire business by 2030.' It also includes, 'Our environmental programs focus on reducing emissions, improving material recovery, and using recycled content in our products and packaging.' These disclosures reflect Apple's broader ESG strategy and long-term environmental impact planning.",
-            "The Company is subject to taxation in the U.S. and numerous foreign jurisdictions' indicates ongoing global tax compliance exposure. It further notes, 'Apple is involved in legal proceedings and investigations from time to time, including antitrust matters in multiple regions,' reflecting regulatory scrutiny. These matters may materially affect financial performance or require changes to business operations depending on their outcomes."
-        ]
-        Entity: Apple Inc.
-
-        ### Example Output:
-        "queries": [ "What steps has Apple Inc. taken to manage its financial position and return value to shareholders in fiscal year 2023?" ]
-
-        ### Input for your task:
-        """
-
+        qstn_instruction_prompt = QSTN_INSTRUCTION_PROMPT
         qstn_instruction_prompt = qstn_instruction_prompt + f"\nMetadata: {metadata}\nGroundings: {groundings_doc_text}\nEntity: {entity}"
         qstn_system_prompt = "You are a helpful assistant, that given a list of groundings, generates meaningful and complex questions from it."
         query_strs = []
-        if "gemini" in self.model_name:
-            qsummary = execute_gemini_LLM_task(self.llm, qstn_instruction_prompt)
-            print(f'generated response for question: ', qsummary)
-            qjson = extract_json_array_by_key(qsummary, "queries")
-            if qjson != None and len(qjson) > 0:
-                query_strs = [qj for qj in qjson if is_valid_sentence(qj, 150)]
-        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
-            qstn_prompt_tokens = self.tokenizer([get_prompt_token(qstn_instruction_prompt, qstn_system_prompt, self.tokenizer)], return_tensors = "pt").to(self.device)
-            qoutputs = execute_llama_LLM_task(self.llm, qstn_prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.7)
-            for j,o in enumerate(qoutputs):
-                qsummary = o
-                print(f'generated {j}th response for question: ', qsummary)
-                if "Input for your task" in qsummary:
-                    ti = qsummary.index("Input for your task")
-                    qjson = extract_json_array_by_key(qsummary[ti:], "queries")
-                    print('qjson', qjson)
-                    if qjson != None and len(qjson) > 0:
-                        query_strs = [qj for qj in qjson if is_valid_sentence(qj, 150)]
-        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            qsummary = execute_llama_task_api(self.llm, qstn_instruction_prompt, qstn_system_prompt, 0.7)
-            print('generated response: ', qsummary)
-            qjson = extract_json_array_by_key(qsummary, "queries")
-            if qjson != None and len(qjson) > 0:
-                query_strs = [qj for qj in qjson if is_valid_sentence(qj, 150)]
-        else:
-            qstn_prompt_tokens = [get_prompt_token(qstn_instruction_prompt, qstn_system_prompt, self.tokenizer)]
-            qoutputs = execute_LLM_tasks(self.llm, qstn_prompt_tokens, self.model_name, max_new_tokens=4000, temperature=0.7, top_p=0.9)
-            for j, o in enumerate(qoutputs):
-                qsummary = o.outputs[0].text.strip()
-                print(f'generated {j}th response for question: ', qsummary)
-                qjson = extract_json_array_by_key(qsummary, "queries")
-                if qjson != None and len(qjson) > 0:
-                    query_strs = [qj for qj in qjson if is_valid_sentence(qj)]
 
+        qsummary = self.__get_output_from_llm(qstn_instruction_prompt, qstn_system_prompt)
+        qjson = extract_json_array_by_key(qsummary, "queries")
+        if qjson != None and len(qjson) > 0:
+            query_strs = [qj for qj in qjson if is_valid_sentence(qj, 150)]
+        
         return query_strs
         
-    def __generate_queries(self, groundings_doc_text, metadata, entity):
-
-        qstn_instruction_prompt = """
-        ### Task:
-        Given a list of groundings (sentences related to given entity), entity and metadata, generate a complex question that requires reasoning over multiple groundings.
-
-        ### Generation Rules
-        - **Do not use chinese characters** in your response. Return responses in English only.
-        - Keep each of the generated query under 100 words.
-        - Make the question as complex as you can, requiring reasoning over multiple groundings.
-        - Example question is just a benchmark for question complexity, but try to generate question more complex than that.
-        - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response for either question or the answer.
-        - **Do not put intermediate, thinking or reasonings steps in your response**
-        - Use the example structure to return the final response.
-        - **Do not copy example from the prompt** in your response.
-
-        ### Input format:
-        Metadata: <meta data of the main company upon which the groundings are based.>
-        Groundings: [\<list of groundings\>]
-        Entity: <entity>
-
-        ### Output format:
-        {
-            "query": "<a complex question generated from the given list of groundings>"
-        }
-
-        ### Example Input
-        Metadata: Company name: Apple | SEC Filing: 10-K
-        Groundings: [
-            "The 10-K filing notes that 'The Company’s business, results of operations and financial condition could be materially adversely affected by changes in global economic conditions.' It also states that 'The Company is subject to intense competition in all markets in which it operates,' highlighting exposure to industry dynamics. Apple points out reliance on third-party suppliers and manufacturers, stating, 'The Company depends on component and product manufacturing and logistical services provided by outsourcing partners.",
-            "Net sales increased 8% or $29.3 billion during 2023 compared to 2022' indicates strong performance, particularly in the iPhone and Services segments. Apple adds, 'Research and development expense increased to $27.7 billion in 2023,' showing commitment to innovation. The filing explains margin variability with 'We expect gross margin to fluctuate in future periods, depending on a variety of factors, including product mix and component costs.",
-            "As of September 30, 2023, the Company’s cash, cash equivalents and marketable securities totaled $162.1 billion' signals substantial liquidity. Apple mentions capital allocation strategies in 'The Company’s capital return program includes both share repurchases and dividends.' The filing also adds, 'The Company believes its existing cash, cash equivalents and marketable securities, together with cash generated from operations, will be sufficient to meet its liquidity needs.",
-            "Apple outlines its sustainability goals with the statement 'The Company is committed to achieving carbon neutrality across its entire business by 2030.' It also includes, 'Our environmental programs focus on reducing emissions, improving material recovery, and using recycled content in our products and packaging.' These disclosures reflect Apple's broader ESG strategy and long-term environmental impact planning.",
-            "The Company is subject to taxation in the U.S. and numerous foreign jurisdictions' indicates ongoing global tax compliance exposure. It further notes, 'Apple is involved in legal proceedings and investigations from time to time, including antitrust matters in multiple regions,' reflecting regulatory scrutiny. These matters may materially affect financial performance or require changes to business operations depending on their outcomes."
-        ]
-        Entity: Apple Inc.
-
-        ### Example Output:
-        {
-            "query": "What steps has Apple Inc. taken to manage its financial position and return value to shareholders in fiscal year 2023?"
-        }
-
-        ### Input for your task:
-        """
-
-        qstn_instruction_prompt = qstn_instruction_prompt + f"\nMetadata: {metadata}\nGroundings: {groundings_doc_text}\nEntity: {entity}"
-        qstn_system_prompt = "You are a helpful assistant, that given a list of groundings, generates meaningful and complex questions from it."
-        query_strs = []
-        if "gemini" in self.model_name:
-            qsummary = execute_gemini_LLM_task(self.llm, qstn_instruction_prompt)
-            print(f'generated response for question: ', qsummary)
-            qjson = extract_json_text_by_key(qsummary, "query")
-            if qjson != None and "query" in qjson and is_valid_sentence(qjson["query"], 100):
-                query_strs.append(qjson["query"])
-        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
-            qstn_prompt_tokens = self.tokenizer([get_prompt_token(qstn_instruction_prompt, qstn_system_prompt, self.tokenizer)], return_tensors = "pt").to(self.device)
-            qoutputs = execute_llama_LLM_task(self.llm, qstn_prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
-            for j,o in enumerate(qoutputs):
-                qsummary = o
-                print(f'generated {j}th response for question: ', qsummary)
-                if "Input for your task" in qsummary:
-                    ti = qsummary.index("Input for your task")
-                    qjson = extract_json_text_by_key(qsummary[ti:], "query")
-                    print('qjson', qjson)
-                    if qjson != None and "query" in qjson and is_valid_sentence(qjson["query"], 100):
-                        query_strs.append(qjson["query"])
-        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            qsummary = execute_llama_task_api(self.llm, qstn_instruction_prompt, qstn_system_prompt)
-            print('generated response: ', qsummary)
-            qjson = extract_json_text_by_key(qsummary, "query")
-            if qjson != None and "query" in qjson and is_valid_sentence(qjson["query"], 100):
-                query_strs.append(qjson["query"])
-        else:
-            qstn_prompt_tokens = [get_prompt_token(qstn_instruction_prompt, qstn_system_prompt, self.tokenizer)]
-            qoutputs = execute_LLM_tasks(self.llm, qstn_prompt_tokens, self.model_name, max_new_tokens=3000, temperature=0.6, top_p=0.9)
-            for j, o in enumerate(qoutputs):
-                qsummary = o.outputs[0].text.strip()
-                print(f'generated {j}th response for question: ', qsummary)
-                qjson = extract_json_text_by_key(qsummary, "query")
-                if qjson != None and "query" in qjson and is_valid_sentence(qjson["query"], 100):
-                    query_strs.append(qjson["query"])
-
-        return query_strs
-    
     def set_filename(self, filename):
         self.filename = filename
         self.company_name = COMPANY_DICT[filename.split('_')[1]]
         
-    def generate_query(self, no_of_qstns = 5, multiple_in_single_prompt = True):
+    def generate_query(self, no_of_qstns = 5):
 
         all_resp = []
         if self.model_folder == "gemini":
@@ -334,42 +199,22 @@ class QueryGenerator:
 
                 print(f'No of groundings under entity {entity}: ', len(filtered_groundings))
 
-                if multiple_in_single_prompt:
-                    for fbi,i in enumerate(range(0, len(filtered_groundings), MAX_GROUNDINGS_TO_SAMPLE)):
-                        groundings_subarr = filtered_groundings[i:i+MAX_GROUNDINGS_TO_SAMPLE]
-                        if len(groundings_subarr) < MIN_GROUNDINGS_NEEDED_FOR_GENERATION:
-                            max_len = max(MAX_GROUNDINGS_TO_SAMPLE, len(filtered_groundings))
-                            groundings_subarr = filtered_groundings[-max_len:]
-                        chunks_used = list(set([gobj['chunk_index'] for gobj in groundings_subarr]))
-                        groundings_str = "[" + ",\n".join(f"{item['text']}" for item in groundings_subarr) + "]"
-                        print(f'\nRunning query  generation for entity: ', entity)
-                        query_strs = self.__generate_queries_in_single_prompt(groundings_str, metadata, entity)
-                        print(f'No of queries formed using entity {entity}: ', len(all_resp[entity]))
-                        total_q += len(query_strs)
-                        all_resp[entity].extend([{'query': query_str, 'groundings': groundings_subarr, 'chunks_used': chunks_used } for query_str in query_strs])
-                        sleep(60)
-                        if len(all_resp[entity]) >= no_of_qstns:
-                            break
-                    attempts += 1
-
-                else:
-                    #max_query_count = max(1, min(no_of_qstns, int(len(filtered_groundings) / MAX_GROUNDINGS_TO_SAMPLE)))
-                    while (len(all_resp[entity]) < no_of_qstns) and (attempts < NO_OF_TRIALS):
-                        for fbi,i in enumerate(range(0, len(filtered_groundings), MAX_GROUNDINGS_TO_SAMPLE)):
-                            groundings_subarr = filtered_groundings[i:i+MAX_GROUNDINGS_TO_SAMPLE]
-                            if len(groundings_subarr) < MIN_GROUNDINGS_NEEDED_FOR_GENERATION:
-                                max_len = max(MAX_GROUNDINGS_TO_SAMPLE, len(filtered_groundings))
-                                groundings_subarr = filtered_groundings[-max_len:]
-                            chunks_used = list(set([gobj['chunk_index'] for gobj in groundings_subarr]))
-                            groundings_str = "[" + ",\n".join(f"{item['text']}" for item in groundings_subarr) + "]"
-                            print(f'\nRunning query  generation for entity: ', entity)
-                            query_strs = self.__generate_queries(groundings_str, metadata, entity)
-                            total_q += len(query_strs)
-                            all_resp[entity].extend([{'query': query_str, 'groundings': groundings_subarr, 'chunks_used': chunks_used } for query_str in query_strs])
-                            print('no of valid qstns formed so far: ', len(all_resp[entity]))
-                            if len(all_resp[entity]) >= no_of_qstns:
-                                break
-                        attempts += 1
+                for fbi,i in enumerate(range(0, len(filtered_groundings), MAX_GROUNDINGS_TO_SAMPLE)):
+                    groundings_subarr = filtered_groundings[i:i+MAX_GROUNDINGS_TO_SAMPLE]
+                    if len(groundings_subarr) < MIN_GROUNDINGS_NEEDED_FOR_GENERATION:
+                        max_len = max(MAX_GROUNDINGS_TO_SAMPLE, len(filtered_groundings))
+                        groundings_subarr = filtered_groundings[-max_len:]
+                    chunks_used = list(set([gobj['chunk_index'] for gobj in groundings_subarr]))
+                    groundings_str = "[" + ",\n".join(f"{item['text']}" for item in groundings_subarr) + "]"
+                    print(f'\nRunning query  generation for entity: ', entity)
+                    query_strs = self.__generate_queries_in_single_prompt(groundings_str, metadata, entity)
+                    print(f'No of queries formed using entity {entity}: ', len(all_resp[entity]))
+                    total_q += len(query_strs)
+                    all_resp[entity].extend([{'query': query_str, 'groundings': groundings_subarr, 'chunks_used': chunks_used } for query_str in query_strs])
+                    sleep(60)
+                    if len(all_resp[entity]) >= no_of_qstns:
+                        break
+                attempts += 1
                         
             if all_resp != {}:
                 print('\nTotal no of questions generated: ', total_q)
