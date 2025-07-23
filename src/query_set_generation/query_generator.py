@@ -40,13 +40,6 @@ MODELS = [
     "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
 ]
 
-SEED_METADATA_TOPICS = [
-    "Risk Factors and Challenges",
-    "Financial Performance and Metrics",
-    "Business Operations, Strategy, and Market Positioning",
-    "Market Trends, Economic Environment, and Industry Dynamics"
-]
-
 HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
 os.environ['HF_HOME'] = HF_CACHE_DIR
 

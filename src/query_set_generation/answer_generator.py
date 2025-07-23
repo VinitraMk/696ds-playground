@@ -14,7 +14,7 @@ from together import Together
 
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
-
+from prompts.query_set_generation.answer_prompt import ANSWER_INSTRUCTION_PROMPT
 
 COMPANY_DICT = {
     'INTC': 'Intel Corp.',
@@ -39,21 +39,9 @@ MODELS = [
     "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
 ]
 
-SEED_METADATA_TOPICS = [
-    "Risk Factors and Challenges",
-    "Financial Performance and Metrics",
-    "Business Operations, Strategy, and Market Positioning",
-    "Market Trends, Economic Environment, and Industry Dynamics"
-]
-
 HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
 os.environ['HF_HOME'] = HF_CACHE_DIR
 
-RELEVANCE_THRESHOLD = 2.0
-MAX_FACTOIDS_TO_SAMPLE = 25
-MIN_FACTOIDS_NEEDED_FOR_GENERATION = 15
-PROMPT_BATCH_SIZE = 1
-NO_OF_TRIALS = 3
 FILENAMES = [
     '10-K_AMD_20231230',
     '10-K_NVDA_20240128',
@@ -119,303 +107,78 @@ class AnswerGenerator:
         else:
             raise SystemExit('Invalid model index passed!')
 
-    def __cleanup_text(self, texts, wc = 100):
-        cleanup_instruction = """
-        ### Task:
-        Given a text, riddled with grammatical, punctuation, insensible/gibberish words or typos (missing spaces), remove
-        the errors and return a clean, grammatically correct and meaningful text if it exists. If a text doesn't exist,
-        return a blank string like this - "". If there are no errors in the text, return the original input string as is.
-
-        ### Cleanup Rules:
-        - Remove punctuation mistakes such as missing spaces, incorrectly placed hyphens, obvious typos, etc.
-        - Return a grammatically correct and meaningful sentence. If it doesn't exist, return a blank string like this - "".
-        - Remove chinese characters.
-        - If the sentence contains gibberish, insensible words return a blank string like this - "".
-        - **Do not** hallucinate completely new words in the sentence.
-        - **Do not** put chinese words in the sentence.
-        - If the text is already meaningful and sensible, return the original input string as is.
-
-        ### Input format:
-        Text: <text>
-
-        ### Output format:
-        Cleaned Text: <cleaned up sentence>
-
-        ### Example Input:
-        Text: "USSGovernmentIntroducedLicensingRequirementsImpactingeExportsToChinHongKonMaouanRussiaIncludingAIICAndHIIntegratedCircuDuringThThirdQuarterOfFiscYearII"
-
-        ### Example Output:
-        Cleaned Text: "US Government introduced licensing requirements impacting exports to China, Hong Kong, Macau, and Russia, including AI IC and HI integrated circuits during the third quarter of Fiscal Year II."
-
-        ### Example Input:
-        Text: "To create an intricate inquiry leveraging several provided facts about Nvidia (NVDA), I focused primarily around how regulatory constraints tied directly back toward broader corporate vulnerabilities stemming partly out environment-centric policies/risks; especially those involving governmental oversight concerning international trade alongside internal pressures arising because excessive resource usage patterns may provoke additional scrutiny/litigation threats down road if mishandles appropriately enough moving forward strategically speaking wise-wise mannerism approachable way feasible indeed possible certainly achievable realistically attainably feasibly plausible logically reasonable sensically rationally understandably comprehensibly coherently consistently maintainingly sustainabily durablly persistantly continuously perpetually enduringlty lastling"
-
-        ### Example Output:
-        Cleaned Text: ""
-
-        ### Example Input:
-        Text: "Apple works with suppliers to transition to clean energy and energy-efficient production methods."
-
-        ### Example Output:
-        Cleaned Text: "Apple works with suppliers to transition to clean energy and energy-efficient production methods."
-
-        ### Input for your task:
-        """
-
-        cleaned_sentences = []
-        cleanup_instructions = [cleanup_instruction + f"\nText: \"{text}\"" for text in texts]
-        if "gemini" in self.model_name:
-            osummary = execute_gemini_LLM_task(self.llm, cleanup_instructions[0])
-            match = re.search(r'Cleaned\s+Text:\s*"([^"]+)"', osummary)
-            if (match and is_valid_sentence(match.group(1), wc)):
-                cleaned_sentences.append(match.group(1))
-            else:
-                cleaned_sentences.append("")
-            return cleaned_sentences
+    def __get_output_from_llm(self, instruction_prompt, system_prompt, llm_config = None):
+        summary = ""
+        if self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
+            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
+            outputs = execute_llama_LLM_task(self.llm, prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
+            summary = outputs[0]
+            if "Input for your task" in summary:
+                ti = summary.index("Input for your task")
+                summary = summary[ti:]
+        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
+            summary = execute_llama_task_api(self.llm, instruction_prompt, system_prompt)
+            print('generated response: ', summary)
         else:
-            cleanup_system_prompt = "You are a helpful assistant, that given a text returns a cleaned, grammatically meaningful sentence if it exists."
-            cleanup_instruction_prompt_tokens = [get_prompt_token(prompt, cleanup_system_prompt, self.tokenizer) for prompt in cleanup_instructions]
-            coutputs = execute_LLM_tasks(self.llm, prompts=cleanup_instruction_prompt_tokens, max_new_tokens=2000, temperature=0.1, top_p=0.9)
-            for o in coutputs:
-                osummary = o.outputs[0].text.strip()
-                print('generated clean up response', osummary)
-                match = re.search(r'Cleaned\s+Text:\s*"([^"]+)"', osummary)
-                if (match and is_valid_sentence(match.group(1), wc)):
-                    cleaned_sentences.append(match.group(1))
-                else:
-                    cleaned_sentences.append("")
-            return cleaned_sentences
+            prompt_tokens = [get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)]
+            outputs = execute_LLM_tasks(self.llm, prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
+            summary = outputs[0].outputs[0].text.strip()
+            print(f'generated response: ', summary)
+
+        return summary
+
 
     def __refine_answers(self, factoids_doc_text, factoids_arr_batch, qna_pairs, metadata):
-        refineans_instruction_prompt = """
-        ### Task:
-        Given a query-answer pair, some metadata, a list factoids, refine the answer
-        to the question using the factoids in the prompt. Also return the list of factoids used to reframe the answer.
-
-        ### Answer Generation Rules
-        - **No opinions, adjectives, elaborations or extra details**
-        - Keep the final refined answer precise, summarizing the factoids.
-        - Newly refined answer is ONLY from the given factoids, **do not** hallucinate new information or factoids to answer the query.
-        - Return the final answer as one single concise paragraph of under 200 words in a json object. Use the example output as reference for structure.
-        - **Do not put chinese characters** in your response. Return responses only in English.
-        - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response.
-        - **Do not** put your chain of thought or reasoning steps in the response. Return **just the answer** in your final response.
-        - **Do not copy example from the prompt** in your response.
-        - Don't think for more than 3000 tokens.
-
-        ### Input format:
-        Query: <query text>
-        Answer: <answer text>
-        Metadata: <meta data of the main company upon which the factoids are based.>
-        Factoids: [\<list of citations relevant to the Q&A pair.\>]
-
-        ### Output format (JSON):
-        Answer: {
-            "answer": <answer to the question, generated from fact(s) in the given text document>
-        }
-
-        ### Example Input
-        Query: "How does Apple’s commitment to achieving carbon neutrality across its supply chain and products by 2030, as discussed in its 10-K, affect its cost structure, supplier relationships, and long-term profitability, and what are the potential risks and rewards associated with this aggressive ESG strategy?"
-        Answer: "Apple’s environmental initiatives have a significant impact on its cost structure, supplier relationships, and long-term profitability. Upfront costs have risen due to investments in renewable energy, low-carbon manufacturing, and sustainable materials. However, the shift to clean energy and more energy-efficient processes may reduce operational costs over time. Additionally, integrating recycled and sustainable materials into product development increases design complexity and processing requirements, thereby raising costs. On the supply side, Apple mandates carbon reduction compliance from its suppliers, leading to higher compliance costs for those partners. Some suppliers may struggle to meet ESG standards, which could cause supply chain disruptions and increase component expenses. Nonetheless, Apple is strengthening its relationships with sustainable suppliers, gaining long-term cost advantages and fostering innovation. From a profitability perspective, Apple benefits from an enhanced brand reputation, which appeals to environmentally conscious consumers and supports premium pricing. Early adoption of ESG practices also mitigates future risks associated with carbon taxes and tighter environmental regulations. Although short-term profitability may be affected by increased expenses, the long-term financial gains are expected to outweigh these initial investments."
-        Metadata: Company name: Apple | SEC Filing: 10-K | Related Topic: Risk Factors and Challenges
-        Factoids: [
-            "We set an ambitious goal — to make our products carbon neutral by 2030, across our entire supply chain and the lifetime energy use of our customers’ devices.",
-            "Our corporate operations have run on 100% renewable energy since 2018.",
-            "Apple also praised its continuing work in recycling, and making new components out of recycled materials. In 2023, 56% of cobalt in Apple batteries came from recycled sources, a 2x increase compared to the previous year.",
-            "Apple is calling on its suppliers to decarbonize operations as the tech giant looks to become carbon neutral by 2030. The company is asking manufacturers to decarbonize Apple-related operations by taking steps such as running on 100% renewable electricity.",
-            "Apple plans to invest in renewable energy projects for its suppliers, emissions reduction technologies, product redesigns and recycling techniques, sustainable sourcing practices, and carbon removal projects."
-        ]
-
-        ### Example Output:
-        Answer: {
-            "answer": "Apple’s commitment to achieving carbon neutrality across its entire supply chain and products by 2030, as disclosed in its 10-K, has far-reaching implications for its cost structure, supplier relationships, and long-term profitability. The company has made significant sustainability-driven investments, such as sourcing renewable energy for global operations and integrating recycled materials into product design. These efforts have led to increased upfront costs, reflecting capital expenditures on clean energy infrastructure, low-carbon manufacturing, and material innovation. On the supply chain front, Apple works closely with its partners to enforce carbon reduction targets, which introduces higher compliance costs. This can be particularly challenging for smaller or less-resourced suppliers, potentially creating supply chain risks if partners fail to meet Apple’s environmental standards. However, by fostering collaborations with environmentally aligned suppliers, Apple enhances long-term supplier resilience, innovation potential, and operational synergy. From a profitability perspective, while short-term margins may be compressed due to the elevated costs of sustainability initiatives, the long-term financial outlook remains favorable. These initiatives strengthen Apple’s brand equity, appeal to eco-conscious consumers, and support premium pricing. Additionally, early adoption of robust ESG practices positions Apple to mitigate future regulatory risks, such as carbon taxation or emission-based trade restrictions. Thus, despite near-term financial pressures, Apple’s ESG strategy is likely to yield durable competitive and economic advantages over time.",
-        }
-
-        ### Input for your task:
-        """
+        refineans_instruction_prompt = ANSWER_REFINEMENT_INSTRUCTION_PROMPT
 
         #zipped_qna_groundings = list(zip(qna_pairs, factoids_doc_texts))
         rans_instruction_prompts = [refineans_instruction_prompt + f"\nQuery: {qo['query']}\nAnswer: {qo['answer']}\nMetadata: {metadata}\nFactoids: {factoids_doc_text}" for qo in qna_pairs]
+        rans_system_prompt = "You are a helpful assistant, that given a Q&A pair, a list of groundings (citations related to the given Q&A pair) improves the answer to the question based on the factoids."
         rqna_pairs = []
         #zipped_qsnts_factoids = list(zip(qna_pairs, factoids_arr_batch))
-        if "gemini" in self.model_name:
-            for ri, rans_instruction_prompt in enumerate(rans_instruction_prompts):
-                rasummary = execute_gemini_LLM_task(self.llm, rans_instruction_prompt)
-                print(f'generated response for refined answer: ', rasummary)
-                ajson = extract_json_text_by_key(rasummary, "answer")
-                if ajson != None and "answer" in ajson:
-                    if cleaned_answers[0] != "":
-                        rqna_pairs.append({
-                            "query": qna_pairs[ri]['query'],
-                            "answer": ajson['answer'],
-                            "groundings": qna_pairs[ri]['groundings']
-                        })
-                    else:
-                        rqna_pairs.append({
-                            'query': qna_pairs[ri]['query'],
-                            'answer': qna_pairs[ri]['answer'],
-                            'groundings': qna_pairs[ri]['groundings']
-                        })
+        for ri, rans_instruction_prompt in enumerate(rans_instruction_prompts):
+            rasummary = self.__get_output_from_llm(rans_instruction_prompt, rans_system_prompt)
+            print(f'generated response for refined answer: ', rasummary)
+            ajson = extract_json_text_by_key(rasummary, "answer")
+            if ajson != None and "answer" in ajson:
+                if cleaned_answers[0] != "":
+                    rqna_pairs.append({
+                        "query": qna_pairs[ri]['query'],
+                        "answer": ajson['answer'],
+                        "groundings": qna_pairs[ri]['groundings']
+                    })
                 else:
                     rqna_pairs.append({
                         'query': qna_pairs[ri]['query'],
                         'answer': qna_pairs[ri]['answer'],
                         'groundings': qna_pairs[ri]['groundings']
                     })
-        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            rans_system_prompt = "You are a helpful assistant, that given a Q&A pair, a list of groundings (citations related to the given Q&A pair) improves the answer to the question based on the factoids."
-            for ri, rans_instruction_prompt in enumerate(rans_instruction_prompts):
-                rasummary = execute_llama_task_api(self.llm, rans_instruction_prompt, rans_system_prompt)
-                print('generated response: ', rasummary)
-                rajson = extract_json_text_by_key(rasummary, "answer")
-                if rajson != None and "answer" in rajson:
-                    rqna_pairs.append({
-                        "query": qna_pairs[ri]['query'],
-                        "answer": rajson['answer'],
-                        "groundings": qna_pairs[ri]['groundings']
-                    })
-                else:
-                    rqna_pairs.append({
-                        "query": qna_pairs[ri]['query'],
-                        "answer": qna_pairs[ri]['answer'],
-                        "groundings": qna_pairs[ri]['groundings']
-                    })
-        else:
-            rans_system_prompt = "You are a helpful assistant, that given a Q&A pair, a list of groundings (citations related to the given Q&A pair) improves the answer to the question based on the factoids."
-            rans_prompt_tokens = [get_prompt_token(rans_prompt_text, rans_system_prompt, self.tokenizer) for rans_prompt_text in rans_instruction_prompts]
-            raoutputs = execute_LLM_tasks(self.llm, rans_prompt_tokens, max_new_tokens=3000, temperature=0.6, top_p=0.9)
-
-            for zqf, o in zip(qna_pairs, raoutputs):
-                rasummary = o.outputs[0].text.strip()
-                print(f'generated response for refined answer: ', rasummary)
-                ajson = extract_json_text_by_key(rasummary, "answer")
-                if ajson != None and "answer" in ajson:
-                    cleaned_answers = self.__cleanup_text([ajson["answer"]], 200)
-                    if cleaned_answers[0] != "":
-                        rqna_pairs.append({
-                            "query": zqf[0]['query'],
-                            "answer": cleaned_answers[0],
-                            "groundings": zqf[0]['groundings']
-                        })
-                    else:
-                        rqna_pairs.append({
-                            'query': zqf[0]['query'],
-                            'answer': zqf[0]['answer'],
-                            'groundings': zqf[0]['groundings']
-                        })
-                else:
-                    rqna_pairs.append({
-                        'query': zqf[0]['query'],
-                        'answer': zqf[0]['answer'],
-                        'groundings': zqf[0]['groundings']
-                    })
-            rqna_pairs = self.__refine_groundings(factoids_doc_text, factoids_arr_batch, rqna_pairs, metadata)
+            else:
+                rqna_pairs.append({
+                    'query': qna_pairs[ri]['query'],
+                    'answer': qna_pairs[ri]['answer'],
+                    'groundings': qna_pairs[ri]['groundings']
+                })
         return rqna_pairs
 
+    
     def __generate_answer(self, qg_pair, metadata, entity):
 
-        ans_instruction_prompt = """
-        ### Task:
-        Analyze the provided question, entity, list of groundings relevant to the question and the entity, and the metadata about the groudings and generate an answer to the question.
-
-        ### Answer Generation Rules
-        - **No opinions, adjectives, elaborations or extra details**
-        - Generated answer is ONLY from the given groundings, **do not** hallucinate new information or groundings to answer the query.
-        - Return the final answer in as much detail as possible, in a json object. Use the example output as reference for structure.
-        - **Do not put non-English characters** in your response. Return responses only in English.
-        - Keep the generated answer detailed and clear but keep it under 400 words.
-        - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response.
-        - **Do not** put your chain of thought or reasoning steps in the response. Return **just the answer** in your final response.
-        - **Do not copy example from the prompt** in your response.
-        - Don't think for more than 3000 tokens.
-
-        ### Input format:
-        Query: <query text>
-        Entity: <entity>
-        Metadata: <meta data of the main company upon which the factoids are based.>
-        Groundings: [\<list of citations relevant to the question and the entity\>]
-
-        ### Output format (JSON):
-        Answer: {
-            "answer": <answer to the question, generated from groundings in the given text document>
-        }
-
-        ### Example Input
-        Query: "How does Apple’s commitment to achieving carbon neutrality across its supply chain and products by 2030, as discussed in its 10-K, affect its cost structure, supplier relationships, and long-term profitability, and what are the potential risks and rewards associated with this aggressive ESG strategy?"
-        Entity: "Apple Inc."
-        Metadata: Company name: Apple | SEC Filing: 10-K
-        Groundings: [
-            "We set an ambitious goal — to make our products carbon neutral by 2030, across our entire supply chain and the lifetime energy use of our customers’ devices.",
-            "Our corporate operations have run on 100% renewable energy since 2018.",
-            "Apple also praised its continuing work in recycling, and making new components out of recycled materials. In 2023, 56% of cobalt in Apple batteries came from recycled sources, a 2x increase compared to the previous year.",
-            "Apple is calling on its suppliers to decarbonize operations as the tech giant looks to become carbon neutral by 2030. The company is asking manufacturers to decarbonize Apple-related operations by taking steps such as running on 100% renewable electricity.",
-            "Apple plans to invest in renewable energy projects for its suppliers, emissions reduction technologies, product redesigns and recycling techniques, sustainable sourcing practices, and carbon removal projects."
-        ]
-
-        ### Example Output:
-        {
-            "answer": "Apple Inc.’s commitment to achieving carbon neutrality across its supply chain and product lifecycle by 2030, as described in its 10-K filing, represents a transformative ESG strategy with implications for cost structure, supplier dynamics, and long-term profitability. Apple has set a clear target: “to make our products carbon neutral by 2030, across our entire supply chain and the lifetime energy use of our customers’ devices.” This effort spans not just internal operations—“Our corporate operations have run on 100% renewable energy since 2018”—but also imposes new standards on suppliers. The company is “asking manufacturers to decarbonize Apple-related operations by taking steps such as running on 100% renewable electricity.” This indicates a strategic push to align upstream partners with its sustainability goals. Such measures likely introduce short- to mid-term cost increases due to investments in “renewable energy projects for its suppliers, emissions reduction technologies, product redesigns and recycling techniques, sustainable sourcing practices, and carbon removal projects.” These outlays may elevate Apple’s cost structure temporarily but are framed as necessary for long-term operational resilience and brand differentiation. On the supplier side, Apple’s push for decarbonization could strain relationships with vendors unable or unwilling to transition. However, Apple mitigates this by directly supporting their transition, which may foster tighter, more collaborative partnerships over time. Apple’s recycling efforts, including the use of recycled materials—“In 2023, 56% of cobalt in Apple batteries came from recycled sources”—also reflect cost containment and risk reduction in critical material sourcing, potentially insulating Apple from raw material price volatility. While risks include higher upfront costs and execution challenges across a global supplier base, potential rewards include regulatory compliance, strengthened ESG positioning, long-term cost savings, and enhanced customer loyalty, all of which may support sustained profitability."
-        }
-
-        ### Input for your task:
-        """
+        ans_instruction_prompt = ANSWER_INSTRUCTION_PROMPT
 
         groundings_str = f"[{','.join(qg_pair['groundings'])}]" 
         ans_instruction_prompt = ans_instruction_prompt + f"\nQuery: {qg_pair['query']}\nEntity: {entity}\nMetadata: {metadata}\nGroundings : {groundings_str}"
+        ans_system_prompt = "You are a helpful assistant, that given a query and list of groundings (citations related to the query), generates meaningful answer to the question."
         qna_pair = {}
-        if "gemini" in self.model_name:
-            asummary = execute_gemini_LLM_task(self.llm, ans_instruction_prompt)
-            print(f'generated response for answer: ', asummary)
-            ajson = extract_json_text_by_key(asummary, "answer")
-            if ajson != None and "answer" in ajson:
-                qg_pair = {
-                    "query": qg_pair['query'],
-                    "answer": ajson["answer"],
-                    "groundings": qg_pair['groundings']
-                }
-        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
-            ans_system_prompt = "You are a helpful assistant, that given a query and list of groundings (citations related to the query), generates meaningful answer to the question."
-            ans_prompt_tokens = self.tokenizer([get_prompt_token(ans_instruction_prompt, ans_system_prompt, self.tokenizer)], return_tensors = "pt", truncation = True, padding = True).to(self.device)
-            aoutputs = execute_llama_LLM_task(self.llm, ans_prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
-            asummary = aoutputs[0]
-            print(f'generated response for question: ', asummary)
-            if "Input for your task" in asummary:
-                ti = asummary.index("Input for your task")
-                ajson = extract_json_text_by_key(asummary[ti:], "answer")
-                print('qjson', ajson)
-                if ajson != None and "answer" in ajson:
-                    qg_pair = {
-                        'query': qg_pair['query'],
-                        'answer': ajson['answer'],
-                        'groundings': qg_pair['groundings']
-                    }
-        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            ans_system_prompt = "You are a helpful assistant, that given a query and list of groundings (citations related to the query), generates meaningful answer to the question."
-            asummary = execute_llama_task_api(self.llm, ans_instruction_prompt, ans_system_prompt)
-            print('generated response: ', asummary)
-            ajson = extract_json_text_by_key(asummary, "answer")
-            if ajson != None and "answer" in ajson:
-                qg_pair = {
-                    'query': qg_pair['query'],
-                    'answer': ajson['answer'],
-                    'groundings': qg_pair['groundings']
-                }
-        else:
-            ans_system_prompt = "You are a helpful assistant, that given a query and list of groundings (citations related to the query), generates meaningful answer to the question."
-            ans_prompt_tokens = [get_prompt_token(ans_prompt_text, ans_system_prompt, self.tokenizer) for ans_prompt_text in ans_instruction_prompts]
-            aoutputs = execute_LLM_tasks(self.llm, ans_prompt_tokens, max_new_tokens=3000, temperature=0.6, top_p=0.9)
-            asummary = aoutputs[0].outputs[0].text.strip()
-            print(f'generated response for answer: ', asummary)
-            ajson = extract_json_text_by_key(asummary, "answer")
-            if ajson != None and "answer" in ajson:
-                cleaned_answers = self.__cleanup_text([ajson["answer"]], 300)
-                if cleaned_answers[0] != "":
-                    qg_pair = {
-                        "query": qg_pair['query'],
-                        "answer": cleaned_answers[0],
-                        "groundings": qg_pair['groundings']
-                    }
-                
+        asummary = self.__get_output_from_llm(ans_instruction_prompt, ans_system_prompt)
+        ajson = extract_json_text_by_key(asummary, "answer")
+        if ajson != None and "answer" in ajson:
+            qg_pair = {
+                "query": qg_pair['query'],
+                "answer": ajson["answer"],
+                "groundings": qg_pair['groundings']
+            }
+        
         return qg_pair
 
     def set_filename(self, filename):
