@@ -14,7 +14,7 @@ from together import Together
 
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
-
+from prompts.query_set_generation.citation_prompt import CITATION_INSTRUCTION_PROMPT
 
 COMPANY_DICT = {
     'INTC': 'Intel Corp.',
@@ -39,21 +39,9 @@ MODELS = [
     "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
 ]
 
-SEED_METADATA_TOPICS = [
-    "Risk Factors and Challenges",
-    "Financial Performance and Metrics",
-    "Business Operations, Strategy, and Market Positioning",
-    "Market Trends, Economic Environment, and Industry Dynamics"
-]
-
 HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
 os.environ['HF_HOME'] = HF_CACHE_DIR
 
-RELEVANCE_THRESHOLD = 2.0
-MAX_FACTOIDS_TO_SAMPLE = 25
-MIN_FACTOIDS_NEEDED_FOR_GENERATION = 15
-PROMPT_BATCH_SIZE = 1
-NO_OF_TRIALS = 3
 FILENAMES = [
     '10-K_AMD_20231230',
     '10-K_NVDA_20240128',
@@ -119,69 +107,37 @@ class CitationGenerator:
         else:
             raise SystemExit('Invalid model index passed!')
 
+    def __get_output_from_llm(self, instruction_prompt, system_prompt, llm_config = None):
+        summary = ""
+        if self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
+            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
+            outputs = execute_llama_LLM_task(self.llm, prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
+            summary = outputs[0]
+            if "Input for your task" in summary:
+                ti = summary.index("Input for your task")
+                summary = summary[ti:]
+        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
+            summary = execute_llama_task_api(self.llm, instruction_prompt, system_prompt)
+            print('generated response: ', summary)
+        else:
+            prompt_tokens = [get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)]
+            outputs = execute_LLM_tasks(self.llm, prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
+            summary = outputs[0].outputs[0].text.strip()
+            print(f'generated response: ', summary)
+
+        return summary
+
     def __generate_citations(self, chunk, qna_pair, metadata):
 
-        citation_instruction_prompt = """
-        ### Task:
-        Analyze the provided chunk of text, question-answer pair and the metadata about company about which the Q&A pair is,
-        and return the exact sentence or sentences that support the answer to the question.
-
-        ### Answer Generation Rules
-        - **Do not put opinions, adjectives, elaborations, gibberish or unnecessary adjectives** in your response.
-        - The sentences that support the answer, **must** be present in the given chunk of text.
-        - The sentences from the chunk of text **must be complete sentences**.
-        - **Do not put non-English characters** in your response. Return responses only in English.
-        - **Do not** put your chain of thought or reasoning steps in the response. Return **just the answer** in your final response.
-
-        ### Input format:
-        Text: <chunk of text from SEC filing document of the company>
-        Query: <query text>
-        Answer: <answer text>
-        Metadata: <meta data of the main company upon which the factoids are based.>
-
-        ### Output format (JSON):
-        "citations": [<list of sentences from the text supporting the answer>]
-
-        ### Input for your task:
-        """
-
+        citation_system_prompt = "You are a helpful assistant, that given a chunk of text, a Q&A pair and metadata about the company addressed in the Q&A pair, extracts citations from the chunk of text that support the answer to the question."
+        citation_instruction_prompt = CITATION_INSTRUCTION_PROMPT
         citation_instruction_prompt = citation_instruction_prompt + f"\nText:{chunk}\nQuery: {qna_pair['query']}\nAnswer: {qna_pair['answer']}\nMetadata: {metadata}"
         citations = []
-        if "gemini" in self.model_name:
-            csummary = execute_gemini_LLM_task(self.llm, citation_instruction_prompt)
-            print(f'generated response for citations: ', csummary)
-            cjson = extract_json_array_by_key(csummary, "citations")
-            if cjson != None and len(cjson) > 0:
-                citations = cjson
-        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
-            citation_system_prompt = "You are a helpful assistant, that given a chunk of text, a Q&A pair and metadata about the company addressed in the Q&A pair, extracts citations from the chunk of text that support the answer to the question."
-            citation_prompt_tokens = self.tokenizer([get_prompt_token(citation_instruction_prompt, citation_system_prompt, self.tokenizer)], return_tensors = "pt", truncation = True, padding = True).to(self.device)
-            coutputs = execute_llama_LLM_task(self.llm, citation_prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
-            csummary = coutputs[0]
-            print(f'generated response for citations: ', csummary)
-            if "Input for your task" in csummary:
-                ti = csummary.index("Input for your task")
-                cjson = extract_json_array_by_key(csummary[ti:], "citations")
-                print('cjson', cjson)
-                if cjson != None and len(cjson) > 0:
-                    citations = cjson
-        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            citation_system_prompt = "You are a helpful assistant, that given a chunk of text, a Q&A pair and metadata about the company addressed in the Q&A pair, extracts citations from the chunk of text that support the answer to the question."
-            csummary = execute_llama_task_api(self.llm, citation_instruction_prompt, citation_system_prompt)
-            print('generated response: ', csummary)
-            cjson = extract_json_array_by_key(csummary, "citations")
-            if cjson != None and len(cjson) > 0:
-                citations = cjson
-        else:
-            citation_system_prompt = "You are a helpful assistant, that given a chunk of text, a Q&A pair and metadata about the company addressed in the Q&A pair, extracts citations from the chunk of text that support the answer to the question."
-            citation_prompt_tokens = [get_prompt_token(citation_instruction_prompt, citation_system_prompt, self.tokenizer)]
-            coutputs = execute_LLM_tasks(self.llm, citation_prompt_tokens, max_new_tokens=3000, temperature=0.6, top_p=0.9)
-            csummary = coutputs[0].outputs[0].text.strip()
-            print(f'generated response for citations: ', csummary)
-            cjson = extract_json_array_by_key(csummary, "citations")
-            if cjson != None and len(cjson) > 0:
-                citations = cjson
-                
+        csummary = self.__get_output_from_llm(citation_instruction_prompt, citation_system_prompt)
+        cjson = extract_json_array_by_key(csummary, "citations")
+        if cjson != None and len(cjson) > 0:
+            citations = cjson
+               
         return citations
 
     def set_filename(self, filename):
