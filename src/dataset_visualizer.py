@@ -94,7 +94,7 @@ if __name__ == "__main__":
     #generated_dataset_path = f'final_results/experiments/exp-{expt_name}/{filename}_generated_queries.json'
     #plots_folder = f'figures/data/queries/{model_folder}'
     #plots_folder = f'final_results/experiments/exp-{expt_name}'
-    plots_folder = f'final_results/pipelines/entity-scoped-pipeline'
+    plots_folder = f'final_results/pipelines/entity-scoped-refinement-pipeline'
 
     with open(generated_dataset_path, "r") as fp:
         query_store = json.load(fp)

@@ -10,10 +10,12 @@ import gc
 from google import genai
 from together import Together
 import random
+from groq import Groq
 
+# custom imports
 from utils.string_utils import extract_json_array_by_key, is_valid_sentence, extract_json_text_by_key, extract_json_object_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
-from prompts.grounding_generation.grounding_prompts import GROUNDING_INSTRUCTION_PROMPT, GROUNDING_EVALUATION_PROMPT, GROUNDING_REFINEMENT_PROMPT
+from src.prompts.grounding_generation.grounding_prompts import GROUNDING_INSTRUCTION_PROMPT, GROUNDING_EVALUATION_PROMPT, GROUNDING_REFINEMENT_PROMPT
 
 
 COMPANY_DICT = {
@@ -36,7 +38,8 @@ MODELS = [
     "Qwen/QwQ-32B-AWQ",
     "meta-llama/Meta-Llama-3.3-70B-Instruct",
     "gemini-2.0-flash",
-    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+    "meta-llama/llama-3.3-70b-versatile"
 ]
 
 
@@ -107,6 +110,9 @@ class GroundingsGenerator:
         elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
             self.llm = Together(api_key = cfg["togetherai_api_key"])
             self.model_folder = "llama"
+        elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
+            self.llm = Groq()
+            self.model_folder = "llama"
         else:
             raise SystemExit('Invalid model index passed!')
         
@@ -171,6 +177,7 @@ class GroundingsGenerator:
                 evaluation_obj = extract_json_object_by_key(esummary, "evaluation")
                 eval_best = evaluation_obj
                 ts = evaluation_obj['entity_relevance'] + evaluation_obj['source_faithfulness'] + evaluation_obj['key_info_coverage'] + evaluation_obj['numeric_recall'] + evaluation_obj['non_redundancy']
+                sleep(90)
 
                 tsmax = ts
                 no_of_attempts = 0
@@ -179,27 +186,30 @@ class GroundingsGenerator:
                     # grounding refinement
                     grounding_str = ",".join(gjson_arr_best)
                     eval_str = str(eval_best)
+                    chunk_text = chunk_texts[gi]['text']
                     grounding_refinement_prompt = GROUNDING_REFINEMENT_PROMPT + f"\nText: {chunk_text}\nEntity: {entity}\nMetadata: {metadata}\nGroundings: {grounding_str}\nEvaluation: {eval_str}"
-                    grounding_refinement_system_prompt = "You are a helpful assistant that given a chunk of text, an entity, some metadata about the text, groundings which are summarized statements related to the entity and their evaluation, returns an improved set of groundings"rounding_system_prompt = "You are a helpful assistant that given a chunk of text, an entity, some metadata about the text, groundings which are summarized statements related to the entity and their evaluation, returns an improved set of groundings"
+                    grounding_refinement_system_prompt = "You are a helpful assistant that given a chunk of text, an entity, some metadata about the text, groundings which are summarized statements related to the entity and their evaluation, returns an improved set of groundings"
                     grsummary = self.__get_output_from_llm(grounding_refinement_prompt, grounding_refinement_system_prompt)
                     gjson_arr_improved = extract_json_array_by_key(grsummary, "groundings")
+                    sleep(90)
 
                     # refined grounding evaluation
-                    grounding_str = ",".join(gjson_arr_improved)
-                    eval_prompt = GROUNDING_EVALUATION_PROMPT
-                    eval_prompt_text = eval_prompt.format(entity = entity,
-                        chunk = chunk_texts[gi]['text'],
-                        metadata = metadata,
-                        groundings = grounding_str)
-                    esummary = self.__get_output_from_llm(eval_prompt_text, evaluation_system_prompt)
-                    evaluation_obj = extract_json_object_by_key(esummary, "evaluation")
-                    ts = evaluation_obj['entity_relevance'] + evaluation_obj['source_faithfulness'] + evaluation_obj['key_info_coverage'] + evaluation_obj['numeric_recall'] + evaluation_obj['non_redundancy']
-                    if ts > tsmax:
-                        tsmax = ts
-                        gjson_arr_best = gjson_arr_improved
-                        eval_best = evaluation_obj
-                    no_of_attempts+=1
-                    sleep(60)
+                    if gjson_arr_improved != None and len(gjson_arr_improved) > 0:
+                        grounding_str = ",".join(gjson_arr_improved)
+                        eval_prompt = GROUNDING_EVALUATION_PROMPT
+                        eval_prompt_text = eval_prompt.format(entity = entity,
+                            chunk = chunk_texts[gi]['text'],
+                            metadata = metadata,
+                            groundings = grounding_str)
+                        esummary = self.__get_output_from_llm(eval_prompt_text, evaluation_system_prompt)
+                        evaluation_obj = extract_json_object_by_key(esummary, "evaluation")
+                        ts = evaluation_obj['entity_relevance'] + evaluation_obj['source_faithfulness'] + evaluation_obj['key_info_coverage'] + evaluation_obj['numeric_recall'] + evaluation_obj['non_redundancy']
+                        if ts > tsmax:
+                            tsmax = ts
+                            gjson_arr_best = gjson_arr_improved
+                            eval_best = evaluation_obj
+                        no_of_attempts+=1
+                    sleep(90)
 
                 # best grounding cleanup
                 if gjson_arr_best!= None and len(gjson_arr_best) > 0:
@@ -228,6 +238,7 @@ class GroundingsGenerator:
         entity_store_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{self.filename}_entities_info.json'
         sampled_entities_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{self.filename}_sampled_entities.json'
         chunks_obj_fp = f'data/chunked_data/{self.filename}_chunked.json'
+        groundings_status_fp = f'groundings_status.json'
 
         if os.path.exists(chunk_store_fp) and os.path.exists(entity_store_fp):
             with open(chunk_store_fp, 'r') as fp:
@@ -252,14 +263,15 @@ class GroundingsGenerator:
             else:
                 with open(sampled_entities_fp, 'r') as fp:
                     sampled_entity_keys = json.load(fp)["sampled_entities"]
-            if os.path.exists('../status.json'):
-                with open('../status.json', 'r') as fp:
+            if os.path.exists(groundings_status_fp):
+                with open(groundings_status_fp, 'r') as fp:
                     groundings_status_info = json.load(fp)
             else:
                 groundings_status_info = {}
             for ek in sampled_entity_keys:
                 if ek in groundings_status_info and groundings_status_info[ek] == "completed":
                     continue
+                groundings_status_info[ek] = "ongoing"
                 chunk_indices = entity_store[ek]["chunk_indices"]
                 #chunk_entities = chunk_store_arr[ci]['entities']
                 print(f'No of chunks for entity {ek}: ', len(chunk_indices))
@@ -273,11 +285,14 @@ class GroundingsGenerator:
                             chunk_store_arr[ci]['groundings'].extend(entity_groundings[ci])
                         else:
                             chunk_store_arr[ci]['groundings'] = entity_groundings[ci]
+                groundings_status_info[ek] = "completed"
                 chunk_store["chunks"] = chunk_store_arr
                 with open(chunk_store_fp, 'w') as fp:
                     json.dump(chunk_store, fp)
+                with open(groundings_status_fp, 'w') as fp:
+                    json.dump(groundings_status_info, fp)
             groundings_status_info = {}
-            with open('../status.json', 'w') as fp:
+            with open(groundings_status_fp, 'w') as fp:
                 json.dump(groundings_status_info, fp)
         else:
             raise SystemExit('Chunk store not found!')
@@ -297,7 +312,7 @@ if __name__ == "__main__":
     sys.stdout = log_file
 
     #multiprocessing.set_start_method("spawn")  # Fixes CUDA issue with multiprocessing
-    torch.cuda.init()
+    #torch.cuda.init()
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_index', type=int, default = 6, required = False)

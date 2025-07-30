@@ -1,16 +1,17 @@
 QSTN_INSTRUCTION_PROMPT = """
     ### Task:
-    Given a list of groundings (sentences related to given entity), entity and metadata, generate a complex question that requires reasoning over multiple groundings.
+    Given a list of groundings (long summaries related to given entity), entity and metadata, generate 5 complex multi-hop questions that requires reasoning over multiple groundings.
 
     ### Generation Rules
-    - **Do not use chinese characters** in your response. Return responses in English only.
-    - Keep each of the generated query under 100 words.
-    - Make the question as complex as you can, requiring reasoning over multiple groundings.
+    - **Do not use non-English characters** in your response. Return responses in English only.
+    - Keep each of the generated query under 150 words.
+    - Make the question as complex as you can, requiring reasoning over multiple (or all) groundings.
+    - Generate the question, such that the answer for it should be formed by **summarizing multiple groundings (atleast 5 groundings or all groundings).**
+    - When generating the question, also try to make it relevant to the entity provided.
     - Example question is just a benchmark for question complexity, but try to generate question more complex than that.
     - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response for either question or the answer.
     - **Do not put intermediate, thinking or reasonings steps in your response**
-    - Use the example structure to return the final response.
-    - **Do not copy example from the prompt** in your response.
+    - Use the example structure to return the final response. **Do not copy example from the prompt** in your response.
 
     ### Input format:
     Metadata: <meta data of the main company upon which the groundings are based.>
@@ -18,9 +19,7 @@ QSTN_INSTRUCTION_PROMPT = """
     Entity: <entity>
 
     ### Output format:
-    {
-        "query": "<a complex question generated from the given list of groundings>"
-    }
+    "queries": [<a list of complex questions generated from the given list of groundings>]
 
     ### Example Input
     Metadata: Company name: Apple | SEC Filing: 10-K
@@ -34,9 +33,7 @@ QSTN_INSTRUCTION_PROMPT = """
     Entity: Apple Inc.
 
     ### Example Output:
-    {
-        "query": "What steps has Apple Inc. taken to manage its financial position and return value to shareholders in fiscal year 2023?"
-    }
+    "queries": [ "What steps has Apple Inc. taken to manage its financial position and return value to shareholders in fiscal year 2023?" ]
 
     ### Input for your task:
 """

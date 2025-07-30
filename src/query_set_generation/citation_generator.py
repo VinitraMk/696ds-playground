@@ -3,7 +3,7 @@ import torch
 from vllm import LLM
 import multiprocessing
 import json
-from time import time
+from time import time, sleep
 import sys
 import argparse
 import re
@@ -14,7 +14,7 @@ from together import Together
 
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
-from prompts.query_set_generation.citation_prompt import CITATION_INSTRUCTION_PROMPT
+from src.prompts.query_set_generation.citation_prompt import CITATION_INSTRUCTION_PROMPT
 
 COMPANY_DICT = {
     'INTC': 'Intel Corp.',
@@ -191,6 +191,7 @@ class CitationGenerator:
                     main_query_store["queries"][entity].extend(filtered_queries)
                 else:
                     main_query_store["queries"][entity] = filtered_queries
+                sleep(90)
                 #query_arr[entity] = filtered_queries                    
 
                 #query_store["queries"] = query_arr

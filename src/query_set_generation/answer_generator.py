@@ -3,7 +3,7 @@ import torch
 from vllm import LLM
 import multiprocessing
 import json
-from time import time
+from time import time, sleep
 import sys
 import argparse
 import re
@@ -14,7 +14,7 @@ from together import Together
 
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
-from prompts.query_set_generation.answer_prompt import ANSWER_INSTRUCTION_PROMPT
+from src.prompts.query_set_generation.answer_prompt import ANSWER_INSTRUCTION_PROMPT
 
 COMPANY_DICT = {
     'INTC': 'Intel Corp.',
@@ -212,6 +212,7 @@ class AnswerGenerator:
                     qobj = self.__generate_answer(qg_pair=qng_pair, metadata=metadata, entity=entity)
                     if 'answer' in qobj:
                         filtered_queries[qi]['answer'] = qobj['answer']
+                sleep(90)
                 query_arr[entity] = filtered_queries                    
 
                 if refine_answers:

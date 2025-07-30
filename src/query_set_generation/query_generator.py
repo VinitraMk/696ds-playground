@@ -14,7 +14,7 @@ from together import Together
 
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
-from prompts.query_set_generation.question_prompt import QSTN_INSTRUCTION_PROMPT
+from src.prompts.query_set_generation.question_prompt import QSTN_INSTRUCTION_PROMPT
 
 
 COMPANY_DICT = {
@@ -42,6 +42,8 @@ MODELS = [
 
 HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
 os.environ['HF_HOME'] = HF_CACHE_DIR
+MAX_GROUNDINGS_TO_SAMPLE = 25
+MIN_GROUNDINGS_NEEDED_FOR_GENERATION = 10
 
 FILENAMES = [
     '10-K_AMD_20231230',

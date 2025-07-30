@@ -9,3 +9,4 @@ config.json
 **/__pycache__/
 figures/
 final_results/experiments/*
+final_results/pipelines/*

@@ -1,9 +1,10 @@
 from transformers import AutoTokenizer
 from vllm import SamplingParams
 import torch
+import asyncio
 
 def get_tokenizer(model_name):
-    if "Llama-3.3-70B" in model_name:
+    if "Llama-3.3-70B" in model_name or "llama-3.3-70b" in model_name:
         model_path = "/datasets/ai/llama3/hub/models--meta-llama--Llama-3.3-70B-Instruct/snapshots/6f6073b423013f6a7d4d9f39144961bfbfbc386b"
         tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only = True)
         tokenizer.lang = "en"
@@ -68,3 +69,43 @@ def execute_llama_task_api(llm_model, prompt, system_prompt, temperature = 0.6):
         temperature = temperature
     )
     return response.choices[0].message.content
+
+def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, temperature = 0.6):
+
+    '''
+    full_prompt = "You will be given multiple prompts for tasks and you are to treat each task/prompt independently and return the appropriate response for each of them\n"
+    for i,prompt in enumerate(prompts):
+        full_prompt = full_prompt + f"\n\nTask {i}:\n\n{prompt}"
+    full_prompt = full_prompt + "Respond as a JSON array of outputs (having separate output for every task), preserving the order of the tasks."
+
+    messages.append({"role": "user", "content": full_prompt})
+    '''
+    
+    delta_responses = []
+    print('length of prompts: ', len(prompts))
+
+    async def process_messages(prompts):
+        results = []
+        for prompt in prompts:
+            
+            messages = [{"role": "system", "content": system_prompt}]
+            messages = [{"role": "user", "content": prompt}]
+            completion = await llm_model.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=messages,
+                temperature=temperature,
+                max_completion_tokens=8192,
+                stream=False,
+                response_format = response_format,
+                stop=None,
+            )
+            #print('raw object', completion)
+            results.append(completion.choices[0].message.content)
+        return results
+
+    delta_responses = asyncio.run(process_messages(prompts))
+
+    #print(f"\nFull response of delta array of length {len(delta_responses)}:")
+    #print("".join(delta_responses))
+    #print('full text completed: ', delta_responses)
+    return delta_responses
