@@ -11,9 +11,10 @@ import gc
 from google import genai
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 from together import Together
+from groq import AsyncGroq
 
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
+from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
 from src.prompts.query_set_generation.question_prompt import QSTN_INSTRUCTION_PROMPT
 
 
@@ -38,11 +39,12 @@ MODELS = [
     "meta-llama/Meta-Llama-3.3-70B-Instruct",
     "gemini-2.0-flash",
     "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+    "meta-llama/llama-3.3-70b-versatile"
 ]
 
 HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
 os.environ['HF_HOME'] = HF_CACHE_DIR
-MAX_GROUNDINGS_TO_SAMPLE = 25
+MAX_GROUNDINGS_TO_SAMPLE = 35
 MIN_GROUNDINGS_NEEDED_FOR_GENERATION = 10
 
 FILENAMES = [
@@ -111,25 +113,31 @@ class QueryGenerator:
         elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
             self.llm = Together(api_key = cfg["togetherai_api_key"])
             self.model_folder = "llama"
+        elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
+            self.llm = AsyncGroq(api_key = cfg["groq_api_key"])
+            self.model_folder = "llama"
         else:
             raise SystemExit('Invalid model index passed!')
 
-    def __get_output_from_llm(self, instruction_prompt, system_prompt, llm_config = None):
+    def __get_output_from_llm(self, instruction_prompts, system_prompt, json_schema = None, llm_config = None):
         summary = ""
         if self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
-            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
+            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompts, system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
             outputs = execute_llama_LLM_task(self.llm, prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
             summary = outputs[0]
             if "Input for your task" in summary:
                 ti = summary.index("Input for your task")
-                summary = summary[ti:]
+                summary = [summary[ti:]]
         elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            summary = execute_llama_task_api(self.llm, instruction_prompt, system_prompt)
+            summary = [execute_llama_task_api(self.llm, instruction_prompts, system_prompt)]
             print('generated response: ', summary)
+        elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
+            summary = execute_groq_task_api(self.llm, json_schema, instruction_prompts, system_prompt)
+            print('generated response: ', summary[0])
         else:
             prompt_tokens = [get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)]
             outputs = execute_LLM_tasks(self.llm, prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
-            summary = outputs[0].outputs[0].text.strip()
+            summary = [outputs[0].outputs[0].text.strip()]
             print(f'generated response: ', summary)
 
         return summary
@@ -140,9 +148,29 @@ class QueryGenerator:
         qstn_instruction_prompt = qstn_instruction_prompt + f"\nMetadata: {metadata}\nGroundings: {groundings_doc_text}\nEntity: {entity}"
         qstn_system_prompt = "You are a helpful assistant, that given a list of groundings, generates meaningful and complex questions from it."
         query_strs = []
+        if self.model_name == "meta-llama/llama-3.3-70b-versatile":
+            query_json_schema = {
+                "type": "json_object",
+                "name": "query_generation",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "queries": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "required": ["queries"],
+                    "additionalProperties": False
+                }
+            }
 
-        qsummary = self.__get_output_from_llm(qstn_instruction_prompt, qstn_system_prompt)
-        qjson = extract_json_array_by_key(qsummary, "queries")
+            qsummary = self.__get_output_from_llm([qstn_instruction_prompt], qstn_system_prompt, query_json_schema)
+        else:
+            qsummary = self.__get_output_from_llm([qstn_instruction_prompt], qstn_system_prompt, query_json_schema)
+        qjson = extract_json_array_by_key(qsummary[0], "queries")
         if qjson != None and len(qjson) > 0:
             query_strs = [qj for qj in qjson if is_valid_sentence(qj, 150)]
         
@@ -206,7 +234,7 @@ class QueryGenerator:
                     print(f'No of queries formed using entity {entity}: ', len(all_resp[entity]))
                     total_q += len(query_strs)
                     all_resp[entity].extend([{'query': query_str, 'groundings': groundings_subarr, 'chunks_used': chunks_used } for query_str in query_strs])
-                    sleep(60)
+                    #sleep(60)
                     if len(all_resp[entity]) >= no_of_qstns:
                         break
                 attempts += 1

@@ -11,9 +11,10 @@ import gc
 from google import genai
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 from together import Together
+from groq import AsyncGroq
 
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
+from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
 from src.prompts.query_set_generation.answer_prompt import ANSWER_INSTRUCTION_PROMPT
 
 COMPANY_DICT = {
@@ -36,7 +37,8 @@ MODELS = [
     "Qwen/QwQ-32B-AWQ",
     "meta-llama/Meta-Llama-3.3-70B-Instruct",
     "gemini-2.0-flash",
-    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+    "meta-llama/llama-3.3-70b-versatile"
 ]
 
 HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
@@ -104,23 +106,29 @@ class AnswerGenerator:
         elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
             self.llm = Together(api_key = cfg["togetherai_api_key"])
             self.model_folder = "llama"
+        elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
+            self.llm = AsyncGroq(api_key = cfg["groq_api_key"])
+            self.model_folder = "llama"
         else:
             raise SystemExit('Invalid model index passed!')
 
-    def __get_output_from_llm(self, instruction_prompt, system_prompt, llm_config = None):
+    def __get_output_from_llm(self, instruction_prompts, system_prompt, json_schema = None, llm_config = None):
         summary = ""
         if self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
-            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
+            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompts[0], system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
             outputs = execute_llama_LLM_task(self.llm, prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
             summary = outputs[0]
             if "Input for your task" in summary:
                 ti = summary.index("Input for your task")
                 summary = summary[ti:]
         elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            summary = execute_llama_task_api(self.llm, instruction_prompt, system_prompt)
+            summary = execute_llama_task_api(self.llm, instruction_prompts[0], system_prompt)
             print('generated response: ', summary)
+        elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
+            summary = execute_groq_task_api(self.llm, json_schema, instruction_prompts, system_prompt)
+            print('generated response: ', summary[0])
         else:
-            prompt_tokens = [get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)]
+            prompt_tokens = [get_prompt_token(instruction_prompts[0], system_prompt, self.tokenizer)]
             outputs = execute_LLM_tasks(self.llm, prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
             summary = outputs[0].outputs[0].text.strip()
             print(f'generated response: ', summary)
@@ -170,8 +178,26 @@ class AnswerGenerator:
         ans_instruction_prompt = ans_instruction_prompt + f"\nQuery: {qg_pair['query']}\nEntity: {entity}\nMetadata: {metadata}\nGroundings : {groundings_str}"
         ans_system_prompt = "You are a helpful assistant, that given a query and list of groundings (citations related to the query), generates meaningful answer to the question."
         qna_pair = {}
-        asummary = self.__get_output_from_llm(ans_instruction_prompt, ans_system_prompt)
-        ajson = extract_json_text_by_key(asummary, "answer")
+        if self.model_name == "meta-llama/llama-3.3-70b-versatile":
+            answer_json_schema = {
+                "type": "json_object",
+                "name": "answer_generation",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "answer": {
+                            "type": "string",
+                        }
+                    },
+                    "required": ["answer"],
+                    "additionalProperties": False
+                }
+            }
+        else:
+            answer_json_schema = None
+        
+        asummary = self.__get_output_from_llm([ans_instruction_prompt], ans_system_prompt, answer_json_schema)
+        ajson = extract_json_text_by_key(asummary[0], "answer")
         if ajson != None and "answer" in ajson:
             qg_pair = {
                 "query": qg_pair['query'],
@@ -212,8 +238,7 @@ class AnswerGenerator:
                     qobj = self.__generate_answer(qg_pair=qng_pair, metadata=metadata, entity=entity)
                     if 'answer' in qobj:
                         filtered_queries[qi]['answer'] = qobj['answer']
-                sleep(90)
-                query_arr[entity] = filtered_queries                    
+                query_arr[entity] = [query_obj for query_obj in filtered_queries if 'answer' in query_obj and query_obj['answer']]
 
                 if refine_answers:
                     pass

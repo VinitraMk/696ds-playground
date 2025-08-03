@@ -10,11 +10,11 @@ import gc
 from google import genai
 from together import Together
 import random
-from groq import Groq
+from groq import AsyncGroq
 
 # custom imports
 from utils.string_utils import extract_json_array_by_key, is_valid_sentence, extract_json_text_by_key, extract_json_object_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
+from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
 from src.prompts.grounding_generation.grounding_prompts import GROUNDING_INSTRUCTION_PROMPT, GROUNDING_EVALUATION_PROMPT, GROUNDING_REFINEMENT_PROMPT
 
 
@@ -45,6 +45,7 @@ MODELS = [
 
 HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
 os.environ['HF_HOME'] = HF_CACHE_DIR
+NO_OF_TRIALS = 3
 
 FILENAMES = [
     '10-K_AMD_20231230',
@@ -111,7 +112,7 @@ class GroundingsGenerator:
             self.llm = Together(api_key = cfg["togetherai_api_key"])
             self.model_folder = "llama"
         elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
-            self.llm = Groq()
+            self.llm = AsyncGroq(api_key = cfg["groq_api_key"])
             self.model_folder = "llama"
         else:
             raise SystemExit('Invalid model index passed!')
@@ -125,22 +126,27 @@ class GroundingsGenerator:
             clean_sentences = []
         return clean_sentences
 
-    def __get_output_from_llm(self, instruction_prompt, system_prompt, llm_config = None):
+    def __get_output_from_llm(self, instruction_prompts, system_prompt, json_schema = None, llm_config = None):
         summary = ""
         if self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
-            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
+            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompts[0], system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
             outputs = execute_llama_LLM_task(self.llm, prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
             summary = outputs[0]
             if "Input for your task" in summary:
                 ti = summary.index("Input for your task")
                 summary = summary[ti:]
+            summary = [summary]
         elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            summary = execute_llama_task_api(self.llm, instruction_prompt, system_prompt)
+            summary = [execute_llama_task_api(self.llm, instruction_prompts[0], system_prompt)]
             print('generated response: ', summary)
+        elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
+            
+            summary = execute_groq_task_api(self.llm, json_schema, instruction_prompts, system_prompt)
+            print('generated response: ', summary[0])
         else:
-            prompt_tokens = [get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)]
+            prompt_tokens = [get_prompt_token(instruction_prompts[0], system_prompt, self.tokenizer)]
             outputs = execute_LLM_tasks(self.llm, prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
-            summary = outputs[0].outputs[0].text.strip()
+            summary = [outputs[0].outputs[0].text.strip()]
             print(f'generated response: ', summary)
 
         return summary
@@ -150,15 +156,71 @@ class GroundingsGenerator:
 
         grounding_instruction_prompts = [grounding_instruction_prompt + f"\nText: {chunk['text']}\nEntity: {entity}\nMetadata: {metadata}" for chunk in chunk_texts]
         groundings_set = {}
+        if self.model_name == "meta-llama/llama-3.3-70b-versatile":
+            groundings_json_schema = {
+                "type": "json_object",
+                "name": "groundings_generation",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "groundings": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "required": ["groundings"],
+                    "additionalProperties": False
+                }
+            }
+
+            evaluation_json_schema = {
+                "type": "json_object",
+                "name": "groundings_generation",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "evaluation": {
+                            "type": "object",
+                            "properties": {
+                                "entity_relevance": {
+                                    "type": "string"
+                                },
+                                "source_faithfulness": {
+                                    "type": "string"
+                                },
+                                "key_info_coverage": {
+                                    "type": "string"
+                                },
+                                "numeric_recall": {
+                                    "type": "string"
+                                },
+                                "non_redundancy": {
+                                    "type": "string"
+                                },
+                                "justification": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "required": ["evaluation"],
+                    "additionalProperties": False
+                }
+            }
+        else:
+            evaluation_json_schema = None
+            groundings_json_schema = None
 
         for gi, grounding_instruction_prompt in enumerate(grounding_instruction_prompts):
             groundings = []
 
             #initial groundings
             grounding_system_prompt = "You are a helpful assistant that given a chunk of text, an entity and some metadata about the text, returns groundings which are summarized statements related to the entity."
-            gsummary = self.__get_output_from_llm(grounding_instruction_prompt, grounding_system_prompt)
+            gsummary = self.__get_output_from_llm([grounding_instruction_prompt], grounding_system_prompt, groundings_json_schema)
 
-            gjson_arr = extract_json_array_by_key(gsummary, "groundings")
+            gjson_arr = extract_json_array_by_key(gsummary[0], "groundings")
 
             # grounding evaluation and refinement
             if gjson_arr != None and len(gjson_arr) > 0:
@@ -173,25 +235,25 @@ class GroundingsGenerator:
                     metadata = metadata,
                     groundings = grounding_str)
 
-                esummary = self.__get_output_from_llm(eval_prompt_text, evaluation_system_prompt)
-                evaluation_obj = extract_json_object_by_key(esummary, "evaluation")
+                esummary = self.__get_output_from_llm([eval_prompt_text], evaluation_system_prompt, evaluation_json_schema)
+                evaluation_obj = extract_json_object_by_key(esummary[0], "evaluation")
                 eval_best = evaluation_obj
                 ts = evaluation_obj['entity_relevance'] + evaluation_obj['source_faithfulness'] + evaluation_obj['key_info_coverage'] + evaluation_obj['numeric_recall'] + evaluation_obj['non_redundancy']
-                sleep(90)
+                #sleep(90)
 
                 tsmax = ts
                 no_of_attempts = 0
-                while tsmax < 5 and no_of_attempts < 3:
+                while tsmax < 5 and no_of_attempts < NO_OF_TRIALS:
                     
-                    # grounding refinement
+                    # grounding refinement initialization
                     grounding_str = ",".join(gjson_arr_best)
                     eval_str = str(eval_best)
                     chunk_text = chunk_texts[gi]['text']
                     grounding_refinement_prompt = GROUNDING_REFINEMENT_PROMPT + f"\nText: {chunk_text}\nEntity: {entity}\nMetadata: {metadata}\nGroundings: {grounding_str}\nEvaluation: {eval_str}"
                     grounding_refinement_system_prompt = "You are a helpful assistant that given a chunk of text, an entity, some metadata about the text, groundings which are summarized statements related to the entity and their evaluation, returns an improved set of groundings"
-                    grsummary = self.__get_output_from_llm(grounding_refinement_prompt, grounding_refinement_system_prompt)
-                    gjson_arr_improved = extract_json_array_by_key(grsummary, "groundings")
-                    sleep(90)
+                    grsummary = self.__get_output_from_llm([grounding_refinement_prompt], grounding_refinement_system_prompt, groundings_json_schema)
+                    gjson_arr_improved = extract_json_array_by_key(grsummary[0], "groundings")
+                    #sleep(90)
 
                     # refined grounding evaluation
                     if gjson_arr_improved != None and len(gjson_arr_improved) > 0:
@@ -201,15 +263,15 @@ class GroundingsGenerator:
                             chunk = chunk_texts[gi]['text'],
                             metadata = metadata,
                             groundings = grounding_str)
-                        esummary = self.__get_output_from_llm(eval_prompt_text, evaluation_system_prompt)
-                        evaluation_obj = extract_json_object_by_key(esummary, "evaluation")
+                        esummary = self.__get_output_from_llm([eval_prompt_text], evaluation_system_prompt, evaluation_json_schema)
+                        evaluation_obj = extract_json_object_by_key(esummary[0], "evaluation")
                         ts = evaluation_obj['entity_relevance'] + evaluation_obj['source_faithfulness'] + evaluation_obj['key_info_coverage'] + evaluation_obj['numeric_recall'] + evaluation_obj['non_redundancy']
                         if ts > tsmax:
                             tsmax = ts
                             gjson_arr_best = gjson_arr_improved
                             eval_best = evaluation_obj
                         no_of_attempts+=1
-                    sleep(90)
+                    #sleep(90)
 
                 # best grounding cleanup
                 if gjson_arr_best!= None and len(gjson_arr_best) > 0:
@@ -318,7 +380,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_index', type=int, default = 6, required = False)
     parser.add_argument('--filename', type = str, default = '10-K_NVDA_20240128', required = False)
     parser.add_argument('--skip_entity_sampling', type = bool, default = False, required = False)
-    parser.add_argument('--prompt_batch_size', type = int, default = 1, required = False)
+    parser.add_argument('--prompt_batch_size', type = int, default = 1, required = False) # prompt batch size to be set as 1 for this always
 
     args = parser.parse_args()
 

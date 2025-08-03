@@ -72,15 +72,6 @@ def execute_llama_task_api(llm_model, prompt, system_prompt, temperature = 0.6):
 
 def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, temperature = 0.6):
 
-    '''
-    full_prompt = "You will be given multiple prompts for tasks and you are to treat each task/prompt independently and return the appropriate response for each of them\n"
-    for i,prompt in enumerate(prompts):
-        full_prompt = full_prompt + f"\n\nTask {i}:\n\n{prompt}"
-    full_prompt = full_prompt + "Respond as a JSON array of outputs (having separate output for every task), preserving the order of the tasks."
-
-    messages.append({"role": "user", "content": full_prompt})
-    '''
-    
     delta_responses = []
     print('length of prompts: ', len(prompts))
 
@@ -105,7 +96,4 @@ def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, te
 
     delta_responses = asyncio.run(process_messages(prompts))
 
-    #print(f"\nFull response of delta array of length {len(delta_responses)}:")
-    #print("".join(delta_responses))
-    #print('full text completed: ', delta_responses)
     return delta_responses

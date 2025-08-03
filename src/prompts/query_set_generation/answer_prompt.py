@@ -3,15 +3,14 @@ ANSWER_INSTRUCTION_PROMPT = """
     Analyze the provided question, entity, list of groundings relevant to the question and the entity, and the metadata about the groudings and generate an answer to the question.
 
     ### Answer Generation Rules
-    - **No opinions, adjectives, elaborations or extra details**
+    - **No opinions, gibberish, adjectives, elaborations or extra details**
     - Generated answer is ONLY from the given groundings, **do not** hallucinate new information or groundings to answer the query.
     - Return the final answer in as much detail as possible, in a json object. Use the example output as reference for structure.
+    - Sentences or points of the answer should be returned as **one single string** as response.
     - **Do not put non-English characters** in your response. Return responses only in English.
     - Keep the generated answer detailed and clear but keep it under 400 words.
-    - **Do not put gibberish, unnecessary and ellaborate adjectives** in your response.
     - **Do not** put your chain of thought or reasoning steps in the response. Return **just the answer** in your final response.
     - **Do not copy example from the prompt** in your response.
-    - Don't think for more than 3000 tokens.
 
     ### Input format:
     Query: <query text>

@@ -18,7 +18,7 @@ QSTN_INSTRUCTION_PROMPT = """
     Groundings: [\<list of groundings\>]
     Entity: <entity>
 
-    ### Output format:
+    ### Output format (JSON):
     "queries": [<a list of complex questions generated from the given list of groundings>]
 
     ### Example Input

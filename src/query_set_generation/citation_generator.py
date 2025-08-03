@@ -11,9 +11,10 @@ import gc
 from google import genai
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 from together import Together
+from groq import AsyncGroq
 
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api
+from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
 from src.prompts.query_set_generation.citation_prompt import CITATION_INSTRUCTION_PROMPT
 
 COMPANY_DICT = {
@@ -36,7 +37,8 @@ MODELS = [
     "Qwen/QwQ-32B-AWQ",
     "meta-llama/Meta-Llama-3.3-70B-Instruct",
     "gemini-2.0-flash",
-    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+    "meta-llama/llama-3.3-70b-versatile"
 ]
 
 HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
@@ -104,23 +106,29 @@ class CitationGenerator:
         elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
             self.llm = Together(api_key = cfg["togetherai_api_key"])
             self.model_folder = "llama"
+        elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
+            self.llm = AsyncGroq(api_key = cfg["groq_api_key"])
+            self.model_folder = "llama"
         else:
             raise SystemExit('Invalid model index passed!')
 
-    def __get_output_from_llm(self, instruction_prompt, system_prompt, llm_config = None):
+    def __get_output_from_llm(self, instruction_prompts, system_prompt, json_schema = None, llm_config = None):
         summary = ""
         if self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
-            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
+            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompts[0], system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
             outputs = execute_llama_LLM_task(self.llm, prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
             summary = outputs[0]
             if "Input for your task" in summary:
                 ti = summary.index("Input for your task")
                 summary = summary[ti:]
         elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            summary = execute_llama_task_api(self.llm, instruction_prompt, system_prompt)
+            summary = execute_llama_task_api(self.llm, instruction_prompts[0], system_prompt)
             print('generated response: ', summary)
+        elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
+            summary = execute_groq_task_api(self.llm, json_schema, instruction_prompts, system_prompt)
+            print('generated response: ', summary[0])
         else:
-            prompt_tokens = [get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)]
+            prompt_tokens = [get_prompt_token(instruction_prompts[0], system_prompt, self.tokenizer)]
             outputs = execute_LLM_tasks(self.llm, prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
             summary = outputs[0].outputs[0].text.strip()
             print(f'generated response: ', summary)
@@ -133,8 +141,28 @@ class CitationGenerator:
         citation_instruction_prompt = CITATION_INSTRUCTION_PROMPT
         citation_instruction_prompt = citation_instruction_prompt + f"\nText:{chunk}\nQuery: {qna_pair['query']}\nAnswer: {qna_pair['answer']}\nMetadata: {metadata}"
         citations = []
-        csummary = self.__get_output_from_llm(citation_instruction_prompt, citation_system_prompt)
-        cjson = extract_json_array_by_key(csummary, "citations")
+        if self.model_name == "meta-llama/llama-3.3-70b-versatile":
+            citation_json_schema = {
+                "type": "json_object",
+                "name": "citation_extraction",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "citations": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "required": ["citations"],
+                    "additionalProperties": False
+                }
+            }
+        else:
+            citation_json_schema = None
+        csummary = self.__get_output_from_llm([citation_instruction_prompt], citation_system_prompt, citation_json_schema)
+        cjson = extract_json_array_by_key(csummary[0], "citations")
         if cjson != None and len(cjson) > 0:
             citations = cjson
                
@@ -187,11 +215,12 @@ class CitationGenerator:
                     if len(cited_chunks) < 5:
                         less_hop_qstns.append({ 'entity': entity, 'query': query_obj['query'], 'answer': query_obj['answer'], 'groundings': query_obj['groundings'], 'citations': all_citations, 'chunks_used': cited_chunks })
                     filtered_queries[qi] = query_obj | { 'citations': all_citations, 'chunks_used': cited_chunks }
+                filtered_queries = [query_obj for query_obj in filtered_queries if "citations" in query_obj and len(query_obj["citations"]) > 0]
                 if entity in main_query_store["queries"]:
                     main_query_store["queries"][entity].extend(filtered_queries)
                 else:
                     main_query_store["queries"][entity] = filtered_queries
-                sleep(90)
+                #sleep(90)
                 #query_arr[entity] = filtered_queries                    
 
                 #query_store["queries"] = query_arr

@@ -23,7 +23,7 @@ GROUNDING_INSTRUCTION_PROMPT = """
     Metadata: <meta data of the main company from whose SEC 10-K filing the chunk of text is from>
 
 
-    ### Output format:
+    ### Output format (JSON):
     "groundings": [\<list of sentences, that related to the entity\>]
 
     ### Example:
@@ -113,7 +113,7 @@ GROUNDING_REFINEMENT_PROMPT = """
     Evaluation: <evaluation of the groundings against various criteria such as relevance, source faithfullness>
 
 
-    ### Output format:
+    ### Output format (JSON):
     "groundings": [\<list of refined sentences, that related to the entity\>]
 
     ### Input for your task
