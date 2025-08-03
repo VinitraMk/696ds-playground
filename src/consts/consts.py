@@ -16,7 +16,7 @@ MODELS = [
 
 
 HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
-os.environ['HF_HOME'] = HF_CACHE_DIR
+
 NO_OF_TRIALS = 3
 
 FILENAMES = [
