@@ -15,12 +15,12 @@ from groq import AsyncGroq
 
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
-from src.prompts.query_set_generation.citation_prompt import CITATION_INSTRUCTION_PROMPT
+from src.prompts.query_set_generation.question_classifier import QSTN_CLASSIFIER_PROMPT
 from consts.company_consts import COMPANY_DICT
 import consts.consts
 
 
-class CitationGenerator:
+class QueryClassifier:
 
     def __init__(self, model_index = 6, prompt_batch_size = 3):
         self.model_name = MODELS[model_index]
@@ -102,95 +102,93 @@ class CitationGenerator:
 
         return summary
 
-    def __generate_citations(self, chunk, qna_pair, metadata):
+    def __classify_qstn(self, qg_pair):
 
-        citation_system_prompt = "You are a helpful assistant, that given a chunk of text, a Q&A pair and metadata about the company addressed in the Q&A pair, extracts citations from the chunk of text that support the answer to the question."
-        citation_instruction_prompt = CITATION_INSTRUCTION_PROMPT
-        citation_instruction_prompt = citation_instruction_prompt + f"\nText:{chunk}\nQuery: {qna_pair['query']}\nAnswer: {qna_pair['answer']}\nMetadata: {metadata}"
-        citations = []
+        qstn_classification_prompt = QSTN_CLASSIFIER_PROMPT
+
+        qstn_classification_prompt = qstn_classification_prompt + f"\nQuery: {qg_pair['query']}"
+        qstn_classification_system_prompt = "You are a helpful assistant, that given a query performs a multi-class classification of the query"
+        categories = []
         if self.model_name == "meta-llama/llama-3.3-70b-versatile":
-            citation_json_schema = {
+            qclass_json_schema = {
                 "type": "json_object",
-                "name": "citation_extraction",
+                "name": "question_classification",
                 "schema": {
                     "type": "object",
                     "properties": {
-                        "citations": {
+                        "categories": {
                             "type": "array",
                             "items": {
                                 "type": "string"
                             }
                         }
                     },
-                    "required": ["citations"],
+                    "required": ["categories"],
                     "additionalProperties": False
                 }
             }
         else:
-            citation_json_schema = None
-        csummary = self.__get_output_from_llm([citation_instruction_prompt], citation_system_prompt, citation_json_schema)
-        cjson = extract_json_array_by_key(csummary[0], "citations")
-        if cjson != None and len(cjson) > 0:
-            citations = cjson
-               
-        return citations
+            qclass_json_schema = None
+        
+        qclass_summary = self.__get_output_from_llm([qstn_classification_prompt], qstn_classification_system_prompt, qclass_json_schema)
+        qclass_json = extract_json_array_by_key(qclass_summary[0], "categories")
+        if qclass_json != None and len(qclass_json) > 0:
+            categories = list(map(lambda q: QUERY_TYPE_MAP[q], qclass_json))
+            
+        return categories
 
     def set_filename(self, filename):
         self.filename = filename
         self.company_name = COMPANY_DICT[filename.split('_')[1]]
         
-    def generate_citations(self, no_of_entities = 20):
+    def classify_qstn(self, no_of_entities = 20):
         
         iquery_store_fp = f'intermediate_data/query_sets/{self.model_folder}/{self.filename}_generated_queries.json'
-        chunk_store_fp = f'data/chunked_data/chunks/{self.filename}_chunked.json'
         main_query_store_fp = f'data/queries/{self.model_folder}/{self.filename}_generated_queries.json'
-        subpar_query_store_fp = f'data/queries/{self.model_folder}/{self.filename}_subpar_queries.json'
 
         if os.path.exists(iquery_store_fp):
             with open(iquery_store_fp, 'r') as fp:
                 query_store = json.load(fp)
             query_arr = query_store["queries"]
-            print('total no of queries formed: ', len(query_arr))
+            print('total no of entities formed: ', len(query_arr))
 
-            with open (chunk_store_fp, 'r') as fp:
-                chunk_store = json.load(fp)["chunks"]
+            if os.path.exists(main_query_store_fp):
+                with open(main_query_store_fp, 'r') as fp:
+                    main_query_store = json.load(fp)
+            else:
+                main_query_store = { "queries": {} }
+            #chunk_topics = ",".join(chunk_obj["topics"])
+            #random_indices = random.sample(range(0, len(all_factoids)), MAX_FACTOIDS_TO_SAMPLE)
 
             metadata = f'Company: {self.company_name} | SEC Filing: 10-K'
             print('\nStarting answer generation for batch of questions\n')
             sampled_entities = list(query_arr.keys())
-            print('\nSampled entities: ', sampled_entities)
-            less_hop_qstns = []
             for ei in range(no_of_entities):
                 entity = sampled_entities[ei]
                 filtered_queries = query_arr[entity]
+                #filtered_queries = [qobj for qobj in filtered_queries if "answer" not in qobj]
                 for qi, query_obj in enumerate(filtered_queries):
-                    chunks_used = query_obj["chunks_used"]
-                    all_citations = []
-                    cited_chunks = []
-                    qna_pair = { 'query': query_obj['query'], 'answer': query_obj['answer'] }
-                    for ci in chunks_used:
-                        chunk = chunk_store[ci]
-                        chunk_citations = self.__generate_citations(chunk = chunk, qna_pair = qna_pair, metadata = metadata)
-                        if len(chunk_citations) > 0:
-                            all_citations.extend(chunk_citations)
-                            cited_chunks.append(ci)
-                    if len(cited_chunks) < 5:
-                        less_hop_qstns.append({ 'entity': entity, 'query': query_obj['query'], 'answer': query_obj['answer'], 'groundings': query_obj['groundings'], 'citations': all_citations, 'chunks_used': cited_chunks })
-                    filtered_queries[qi] = query_obj | { 'citations': all_citations, 'chunks_used': cited_chunks }
-                filtered_queries = [query_obj for query_obj in filtered_queries if "citations" in query_obj and len(query_obj["citations"]) > 0]
-
-                #sleep(90)
-                query_arr[entity] = filtered_queries                    
+                    categories = self.__classify_qstn(qg_pair=query_obj)
+                    query_obj['actual_qstn_type'] = categories
+                    filtered_queries[qi] = query_obj
+                    
+                query_arr[entity] = filtered_queries
                 query_store["queries"] = query_arr
+
                 with open(iquery_store_fp, 'w') as fp:
-                    json.dump(query_store, fp) 
+                    json.dump(query_store, fp)
 
-            with open(subpar_query_store_fp, 'w') as fp:
-                json.dump({ "queries": less_hop_qstns}, fp)
+                if entity in main_query_store["queries"]:
+                    main_query_store["queries"][entity].extend(filtered_queries)
+                else:
+                    main_query_store["queries"][entity] = filtered_queries
+            #main_query_store["queries"][entity] = filtered_queries
+        
+            with open(main_query_store_fp, 'w') as fp:
+                json.dump(main_query_store, fp)
 
-            print('\nNo of questions with less than 5 hops: ', len(less_hop_qstns))
-
-            
+            os.remove(iquery_store_fp) # remove from intermediate storage after final dataset is constructed
+                
         else:
             SystemExit('Chunk store not found!')
 
@@ -202,7 +200,7 @@ class CitationGenerator:
 
 if __name__ == "__main__":
     st = time()
-    log_fp = f'logs/bu-citation-logs.txt'
+    log_fp = f'logs/bu-answer-logs.txt'
     log_file = open(log_fp, 'w')
     old_stdout = sys.stdout
     sys.stdout = log_file
@@ -218,14 +216,14 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    ans_gen = CitationGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size)
+    qstn_classifier = QueryClassifier(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size)
     print(f'\n\nGenerating answers for file: {args.filename}')
-    ans_gen.set_filename(args.filename)
-    ans_gen.generate_citations(no_of_entities = args.no_of_entities)
+    qstn_classifier.set_filename(args.filename)
+    qstn_classifier.classify_qstn(no_of_entities = args.no_of_entities)
     torch.cuda.empty_cache()
 
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout
     log_file.close()
 
-    ans_gen.destroy()
+    qstn_classifier.destroy()

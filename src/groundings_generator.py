@@ -16,47 +16,8 @@ from groq import AsyncGroq
 from utils.string_utils import extract_json_array_by_key, is_valid_sentence, extract_json_text_by_key, extract_json_object_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
 from src.prompts.grounding_generation.grounding_prompts import GROUNDING_INSTRUCTION_PROMPT, GROUNDING_EVALUATION_PROMPT, GROUNDING_REFINEMENT_PROMPT
-
-
-COMPANY_DICT = {
-    'INTC': 'Intel Corp.',
-    'AMD': 'AMD Inc.',
-    'NVDA': 'Nvidia Corp.',
-    'TSLA': 'Tesla Inc.',
-    'F': 'Ford Motor Company',
-    'GM': 'General Motors'
-}
-
-MODELS = [
-    "meta-llama/Llama-2-70b-hf",
-    "meta-llama/Llama-2-13b-hf",
-    "meta-llama/Meta-Llama-3-8B-Instruct",
-    "meta-llama/Llama-2-13b-chat-hf",
-    "meta-llama/Llama-2-70b-chat-hf",
-    "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4",
-    "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int8",
-    "Qwen/QwQ-32B-AWQ",
-    "meta-llama/Meta-Llama-3.3-70B-Instruct",
-    "gemini-2.0-flash",
-    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
-    "meta-llama/llama-3.3-70b-versatile"
-]
-
-
-HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
-os.environ['HF_HOME'] = HF_CACHE_DIR
-NO_OF_TRIALS = 3
-
-FILENAMES = [
-    '10-K_AMD_20231230',
-    '10-K_NVDA_20240128',
-    '10-K_F_20231231',
-    '10-K_GM_20231231',
-    '10-K_INTC_20231230',
-    '10-K_TSLA_20231231'
-]
-
-IGNORE_ENTITIES = ['Table of Contents', 'SEC', '10-K filings', 'SEC 10-K filings', 'SEC 10-K', 'SEC (Securities and Exchange Commission)', 'Notes', 'Item 1A', 'Part IV, Item 15', 'Item 601(b)(32)(ii)', 'Item 15', 'Item']
+from consts.company_consts import COMPANY_DICT
+import consts.consts
 
 class GroundingsGenerator:
 
@@ -284,7 +245,8 @@ class GroundingsGenerator:
         return groundings_set
 
     def __sample_entities(self, entities_info, count_range = (5, 15), k = 10):
-        relevant_entities = {ek: entities_info[ek] for ek in entities_info.keys() if (ek not in IGNORE_ENTITIES) and (entities_info[ek]['count'] >= count_range[0]) and (entities_info[ek]['count'] <= count_range[1])}
+        entities_to_ignore = [ek.lower() for ek in IGNORE_ENTITIES]
+        relevant_entities = {ek: entities_info[ek] for ek in entities_info.keys() if (ek.lower() not in entities_to_ignore) and (entities_info[ek]['count'] >= count_range[0]) and (entities_info[ek]['count'] <= count_range[1])}
         min_k = min(len(relevant_entities), k)
         sampled_entities = random.sample(relevant_entities.keys(), min_k)
         return sampled_entities
@@ -293,13 +255,13 @@ class GroundingsGenerator:
         self.filename = filename
         self.company_name = COMPANY_DICT[filename.split('_')[1]]
 
-    def generate_groundings(self, skip_entity_sampling = False):
+    def generate_groundings(self, skip_entity_sampling = False, no_of_entities = 5):
 
 
         chunk_store_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{self.filename}_chunk_store.json'
         entity_store_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{self.filename}_entities_info.json'
         sampled_entities_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{self.filename}_sampled_entities.json'
-        chunks_obj_fp = f'data/chunked_data/{self.filename}_chunked.json'
+        chunks_obj_fp = f'data/chunked_data/chunks/{self.filename}_chunked.json'
         groundings_status_fp = f'groundings_status.json'
 
         if os.path.exists(chunk_store_fp) and os.path.exists(entity_store_fp):
@@ -318,7 +280,7 @@ class GroundingsGenerator:
             print('\nStarting grounding generation for each chunk\n')
             
             if not(skip_entity_sampling):
-                sampled_entity_keys = self.__sample_entities(entities_info=entity_store, count_range=(5, 20), k = 20)
+                sampled_entity_keys = self.__sample_entities(entities_info=entity_store, count_range=(5, 20), k = no_of_entities)
                 print('\nSampled entities: ', sampled_entity_keys)
                 with open(sampled_entities_fp, 'w') as fp:
                     json.dump({ "sampled_entities": sampled_entity_keys }, fp)
@@ -381,13 +343,14 @@ if __name__ == "__main__":
     parser.add_argument('--filename', type = str, default = '10-K_NVDA_20240128', required = False)
     parser.add_argument('--skip_entity_sampling', type = bool, default = False, required = False)
     parser.add_argument('--prompt_batch_size', type = int, default = 1, required = False) # prompt batch size to be set as 1 for this always
+    parser.add_argument('--no_of_entities', type = int, default = 5, required = False)
 
     args = parser.parse_args()
 
     ground_gen = GroundingsGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size)
     print(f'\n\nGenerating groundings for file: {args.filename}')
     ground_gen.set_filename(args.filename)
-    ground_gen.generate_groundings(skip_entity_sampling = args.skip_entity_sampling)
+    ground_gen.generate_groundings(skip_entity_sampling = args.skip_entity_sampling, no_of_entities = args.no_of_entities)
 
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout

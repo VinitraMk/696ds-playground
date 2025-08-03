@@ -15,54 +15,20 @@ from groq import AsyncGroq
 
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
-from src.prompts.query_set_generation.question_prompt import QSTN_INSTRUCTION_PROMPT
-
-
-COMPANY_DICT = {
-    'INTC': 'Intel Corp.',
-    'AMD': 'AMD Inc.',
-    'NVDA': 'Nvidia Corp.',
-    'TSLA': 'Tesla Inc.',
-    'F': 'Ford Motor Company',
-    'GM': 'General Motors'
-}
-
-MODELS = [
-    "meta-llama/Llama-2-70b-hf",
-    "meta-llama/Llama-2-13b-hf",
-    "meta-llama/Meta-Llama-3-8B-Instruct",
-    "meta-llama/Llama-2-13b-chat-hf",
-    "meta-llama/Llama-2-70b-chat-hf",
-    "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4",
-    "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int8",
-    "Qwen/QwQ-32B-AWQ",
-    "meta-llama/Meta-Llama-3.3-70B-Instruct",
-    "gemini-2.0-flash",
-    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
-    "meta-llama/llama-3.3-70b-versatile"
-]
-
-HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
-os.environ['HF_HOME'] = HF_CACHE_DIR
-MAX_GROUNDINGS_TO_SAMPLE = 35
-MIN_GROUNDINGS_NEEDED_FOR_GENERATION = 10
-
-FILENAMES = [
-    '10-K_AMD_20231230',
-    '10-K_NVDA_20240128',
-    '10-K_F_20231231',
-    '10-K_GM_20231231',
-    '10-K_INTC_20231230',
-    '10-K_TSLA_20231231'
-]
+from src.prompts.query_set_generation.inference_question_prompt import INF_QSTN_INSTRUCTION_PROMPT
+from src.prompts.query_set_generation.comparison_question_prompt import CMP_QSTN_INSTRUCTION_PROMPT
+from src.prompts.query_set_generation.temporal_question_prompt import TMP_QSTN_INSTRUCTION_PROMPT
+from consts.company_consts import COMPANY_DICT
+import consts.consts
 
 class QueryGenerator:
 
-    def __init__(self, model_index = 6):
+    def __init__(self, model_index = 6, qstn_type = 'INF'):
         #self.filename = filename
         #self.company_name = COMPANY_DICT[filename.split('_')[1]]
         self.device = torch.device("cuda")
         self.model_name = MODELS[model_index]
+        self.qstn_type = qstn_type
 
         with open("./config.json", "r") as fp:
             cfg = json.load(fp)
@@ -143,8 +109,13 @@ class QueryGenerator:
         return summary
 
     def __generate_queries_in_single_prompt(self, groundings_doc_text, metadata, entity):
+        
+        qstn_instruction_prompt = INF_QSTN_INSTRUCTION_PROMPT
+        if self.qstn_type == 'CMP':
+            qstn_instruction_prompt = CMP_QSTN_INSTRUCTION_PROMPT
+        elif self.qstn_type == 'TMP':
+            qstn_instruction_prompt = TMP_QSTN_INSTRUCTION_PROMPT
 
-        qstn_instruction_prompt = QSTN_INSTRUCTION_PROMPT
         qstn_instruction_prompt = qstn_instruction_prompt + f"\nMetadata: {metadata}\nGroundings: {groundings_doc_text}\nEntity: {entity}"
         qstn_system_prompt = "You are a helpful assistant, that given a list of groundings, generates meaningful and complex questions from it."
         query_strs = []
@@ -180,7 +151,7 @@ class QueryGenerator:
         self.filename = filename
         self.company_name = COMPANY_DICT[filename.split('_')[1]]
         
-    def generate_query(self, no_of_qstns = 5):
+    def generate_query(self, no_of_qstns = 5, no_of_entities = 20):
 
         all_resp = []
         if self.model_folder == "gemini":
@@ -210,7 +181,8 @@ class QueryGenerator:
             all_resp = {}
             print('\nStarting query generation for batch of factoids\n')
             total_q = 0
-            for entity in sampled_entities:
+            for ei in range(no_of_entities):
+                entity = sampled_entities[ei]
                 attempts = 0
                 all_resp[entity] = []
                 filtered_groundings = []
@@ -231,9 +203,9 @@ class QueryGenerator:
                     groundings_str = "[" + ",\n".join(f"{item['text']}" for item in groundings_subarr) + "]"
                     print(f'\nRunning query  generation for entity: ', entity)
                     query_strs = self.__generate_queries_in_single_prompt(groundings_str, metadata, entity)
-                    print(f'No of queries formed using entity {entity}: ', len(all_resp[entity]))
                     total_q += len(query_strs)
-                    all_resp[entity].extend([{'query': query_str, 'groundings': groundings_subarr, 'chunks_used': chunks_used } for query_str in query_strs])
+                    all_resp[entity].extend([{'query': query_str, 'qstn_hop_span': 'single_doc', 'groundings': groundings_subarr, 'chunks_used': chunks_used, 'intended_qstn_type': [self.qstn_type] } for query_str in query_strs])
+                    print(f'No of queries formed using entity {entity}: ', len(all_resp[entity]))
                     #sleep(60)
                     if len(all_resp[entity]) >= no_of_qstns:
                         break
@@ -273,13 +245,15 @@ if __name__ == "__main__":
     parser.add_argument('--model_index', type=int, default = 6, required = False)
     parser.add_argument('--no_of_qstns', type = int, default = 5, required = False)
     parser.add_argument('--filename', type = str, default = '10-K_NVDA_20240128', required = False)
+    parser.add_argument('--no_of_entities', type = int, default = 20, required = False)
+    parser.add_argument('--query_type', type = str, default = 'INF', required = False)
 
     args = parser.parse_args()
 
-    query_gen = QueryGenerator(model_index = args.model_index)
+    query_gen = QueryGenerator(model_index = args.model_index, qstn_type = args.query_type)
     print(f'\n\nGenerating queries for file: {args.filename}')
     query_gen.set_filename(args.filename)
-    query_gen.generate_query(no_of_qstns = args.no_of_qstns)
+    query_gen.generate_query(no_of_qstns = args.no_of_qstns, no_of_entities = args.no_of_entities)
 
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout

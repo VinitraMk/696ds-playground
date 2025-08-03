@@ -75,23 +75,45 @@ def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, te
     delta_responses = []
     print('length of prompts: ', len(prompts))
 
-    async def process_messages(prompts):
+    async def process_messages(prompts, max_retries = 3):
         results = []
+
         for prompt in prompts:
-            
-            messages = [{"role": "system", "content": system_prompt}]
-            messages = [{"role": "user", "content": prompt}]
-            completion = await llm_model.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=messages,
-                temperature=temperature,
-                max_completion_tokens=8192,
-                stream=False,
-                response_format = response_format,
-                stop=None,
-            )
-            #print('raw object', completion)
-            results.append(completion.choices[0].message.content)
+            attempt = 0
+
+            success = False
+
+            while attempt < max_retries:
+                try:
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ]
+                    completion = await llm_model.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=messages,
+                        temperature=temperature,
+                        max_completion_tokens=8192,
+                        stream=False,
+                        response_format=response_format,
+                        stop=None,
+                    )
+                    results.append(completion.choices[0].message.content)
+                    success = True
+                    break
+
+                except Exception as e:
+                    attempt += 1
+                    print(f"[Attempt {attempt}] Error during request: {e}")
+                    if attempt < max_retries:
+                        await asyncio.sleep(1.5)
+                    else:
+                        print(f"Failed after {max_retries} attempts. Exiting.")
+                        SystemExit()
+
+            if not success:
+                SystemExit("Groq api responded with errors!")
+        
         return results
 
     delta_responses = asyncio.run(process_messages(prompts))

@@ -15,7 +15,7 @@ for ci, chunk in enumerate(chunk_store["chunks"]):
         if len(entities_to_retain) > 0:
             filtered_groundings = [grobj for grobj in groundings if grobj['entity'] in entities_to_retain]
         else:
-            filtered_groundings = groundings
+            filtered_groundings = []
         chunk_store["chunks"][ci]["groundings"] = filtered_groundings
         #del chunk_store["chunks"][ci]["groundings"]
 

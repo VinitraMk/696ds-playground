@@ -15,33 +15,8 @@ from groq import AsyncGroq
 from utils.string_utils import extract_json_array_by_key, is_valid_sentence, extract_json_object_array_by_keys, extract_json_text_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, get_tokenizer, execute_llama_task_api, execute_groq_task_api
 from src.prompts.entity_generation.entity_prompt import ENTITY_INSTRUCTION_PROMPT
-
-COMPANY_DICT = {
-    'INTC': 'Intel Corp.',
-    'AMD': 'AMD Inc.',
-    'NVDA': 'Nvidia Corp.',
-    'TSLA': 'Tesla Inc.',
-    'F': 'Ford Motor Company',
-    'GM': 'General Motors'
-}
-
-MODELS = [
-    "meta-llama/Llama-2-70b-hf",
-    "meta-llama/Llama-2-13b-hf",
-    "meta-llama/Meta-Llama-3-8B-Instruct",
-    "meta-llama/Llama-2-13b-chat-hf",
-    "meta-llama/Llama-2-70b-chat-hf",
-    "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4",
-    "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int8",
-    "Qwen/QwQ-32B-AWQ",
-    "meta-llama/Meta-Llama-3-70B",
-    "gemini-2.0-flash",
-    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
-    "meta-llama/llama-3.3-70b-versatile"
-]
-
-HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
-os.environ['HF_HOME'] = HF_CACHE_DIR
+from consts.company_consts import COMPANY_DICT
+import consts.consts
 
 class EntityGen:
 
@@ -199,12 +174,9 @@ class EntityGen:
     def generate_entities(self):
 
         chunk_fn = f'{self.filename}_chunked'
-        chunk_fp = f'data/chunked_data/{chunk_fn}.json'
-        scored_chunk_fp = f'data/chunked_data/scored_chunks/{chunk_fn}.json'
+        chunk_fp = f'data/chunked_data/chunks/{chunk_fn}.json'
         with open(chunk_fp, 'r') as fp:
             self.all_chunks = json.load(fp)["chunks"]
-        with open(scored_chunk_fp, 'r') as fp:
-            self.scored_chunks = json.load(fp)
         self.chunks = [{ 'chunk_index': ci, 'text': self.all_chunks[ci] } for ci in range(len(self.scored_chunks))]
         print('Filtered chunks: ', len(self.chunks))
 

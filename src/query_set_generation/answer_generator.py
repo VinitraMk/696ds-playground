@@ -16,42 +16,8 @@ from groq import AsyncGroq
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
 from src.prompts.query_set_generation.answer_prompt import ANSWER_INSTRUCTION_PROMPT
-
-COMPANY_DICT = {
-    'INTC': 'Intel Corp.',
-    'AMD': 'AMD Inc.',
-    'NVDA': 'Nvidia Corp.',
-    'TSLA': 'Tesla Inc.',
-    'F': 'Ford Motor Company',
-    'GM': 'General Motors'
-}
-
-MODELS = [
-    "meta-llama/Llama-2-70b-hf",
-    "meta-llama/Llama-2-13b-hf",
-    "meta-llama/Meta-Llama-3-8B-Instruct",
-    "meta-llama/Llama-2-13b-chat-hf",
-    "meta-llama/Llama-2-70b-chat-hf",
-    "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4",
-    "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int8",
-    "Qwen/QwQ-32B-AWQ",
-    "meta-llama/Meta-Llama-3.3-70B-Instruct",
-    "gemini-2.0-flash",
-    "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
-    "meta-llama/llama-3.3-70b-versatile"
-]
-
-HF_CACHE_DIR = '/work/pi_wenlongzhao_umass_edu/16/vmuralikrish_umass_edu/.huggingface-cache'
-os.environ['HF_HOME'] = HF_CACHE_DIR
-
-FILENAMES = [
-    '10-K_AMD_20231230',
-    '10-K_NVDA_20240128',
-    '10-K_F_20231231',
-    '10-K_GM_20231231',
-    '10-K_INTC_20231230',
-    '10-K_TSLA_20231231'
-]
+from consts.company_consts import COMPANY_DICT
+import consts.consts
 
 class AnswerGenerator:
 
@@ -211,7 +177,7 @@ class AnswerGenerator:
         self.filename = filename
         self.company_name = COMPANY_DICT[filename.split('_')[1]]
         
-    def generate_answer(self, refine_answers = False):
+    def generate_answer(self, refine_answers = False, no_of_entities = 20):
         
         iquery_store_fp = f'intermediate_data/query_sets/{self.model_folder}/{self.filename}_generated_queries.json'
 
@@ -227,19 +193,21 @@ class AnswerGenerator:
 
             metadata = f'Company: {self.company_name} | SEC Filing: 10-K'
             print('\nStarting answer generation for batch of questions\n')
-            sampled_entities = query_arr.keys()
-            for entity in sampled_entities:
+            sampled_entities = list(query_arr.keys())
+            for ei in range(no_of_entities):
+                entity = sampled_entities[ei]
                 filtered_queries = query_arr[entity]
+                #filtered_queries = [qobj for qobj in filtered_queries if "answer" not in qobj]
                 for qi, query_obj in enumerate(filtered_queries):
-                    grounding_texts = [gr['text'] for gr in query_obj["groundings"]]
-                    qng_pair = { 'query': query_obj['query'], "groundings": grounding_texts }
-                    #groundings_arr_batch = [qs["groundings"] for qs in filtered_queries[i:(i+self.prompt_batch_size)]] 
-                    #groundings_doc_batch = ["[" + ",".join(f"\"{item}\"" for item in groundings_arr) + "]" for groundings_arr in groundings_arr_batch]
-                    qobj = self.__generate_answer(qg_pair=qng_pair, metadata=metadata, entity=entity)
-                    if 'answer' in qobj:
-                        filtered_queries[qi]['answer'] = qobj['answer']
+                    if "answer" not in query_obj:
+                        grounding_texts = [gr['text'] for gr in query_obj["groundings"]]
+                        qng_pair = { 'query': query_obj['query'], "groundings": grounding_texts }
+                        qobj = self.__generate_answer(qg_pair=qng_pair, metadata=metadata, entity=entity)
+                        if 'answer' in qobj:
+                            filtered_queries[qi]['answer'] = qobj['answer']
                 query_arr[entity] = [query_obj for query_obj in filtered_queries if 'answer' in query_obj and query_obj['answer']]
 
+                # NOT IMPLEMENTED
                 if refine_answers:
                     pass
 
@@ -271,13 +239,14 @@ if __name__ == "__main__":
     parser.add_argument('--refine_answers', type = bool, default = False, required = False)
     parser.add_argument('--filename', type = str, default = '10-K_NVDA_20240128', required = False)
     parser.add_argument('--prompt_batch_size', type = int, default = 1, required = False)
+    parser.add_argument('--no_of_entities', type =int, default = 20, required = False)
 
     args = parser.parse_args()
 
     ans_gen = AnswerGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size)
     print(f'\n\nGenerating answers for file: {args.filename}')
     ans_gen.set_filename(args.filename)
-    ans_gen.generate_answer(refine_answers = args.refine_answers)
+    ans_gen.generate_answer(refine_answers = args.refine_answers, no_of_entities = args.no_of_entities)
     torch.cuda.empty_cache()
 
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')

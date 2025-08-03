@@ -1,6 +1,12 @@
-QSTN_INSTRUCTION_PROMPT = """
+TMP_QSTN_INSTRUCTION_PROMPT = """
     ### Task:
-    Given a list of groundings (long summaries related to given entity), entity and metadata, generate 5 complex multi-hop questions that requires reasoning over multiple groundings.
+    Given a list of groundings (long-form summaries related to a specific entity), along with the entity name and associated metadata, generate 5 complex multi-hop questions that require reasoning across multiple groundings.
+
+    Ensure that the questions are temporal in nature—they should address topics, facts, or data points that exhibit changes over time as described in the groundings. These questions should involve explicit inference or comparison of topics or events across time-periods, specify the said time periods in some way.
+
+    Refer to the examples of temporal questions provided in the prompt to understand the characteristics strong temporal questions and rationale behind why they are temporal in nature.
+
+    Return only the list of generated questions as strings. Do not include any rationale, explanation, or metadata.
 
     ### Generation Rules
     - **Do not use non-English characters** in your response. Return responses in English only.
@@ -18,7 +24,7 @@ QSTN_INSTRUCTION_PROMPT = """
     Groundings: [\<list of groundings\>]
     Entity: <entity>
 
-    ### Output format (JSON):
+    ### Output format (TARGET JSON FORMAT):
     "queries": [<a list of complex questions generated from the given list of groundings>]
 
     ### Example Input
@@ -32,8 +38,29 @@ QSTN_INSTRUCTION_PROMPT = """
     ]
     Entity: Apple Inc.
 
-    ### Example Output:
-    "queries": [ "What steps has Apple Inc. taken to manage its financial position and return value to shareholders in fiscal year 2023?" ]
+    ### Examples of temporal-based questions:
+    "queries": [
+        {
+            "question": "How did Apple's business operations and financial condition change between 2022 and 2023 in response to global economic conditions and market competition?",
+            "rationale": "This question explicitly compares two fiscal years and asks about changes in external conditions and internal performance."
+        },
+        {
+            "question": "How did Apple's net sales and gross margin evolve from 2022 to 2023, particularly in the iPhone and Services segments, and what were the contributing factors?",
+            "rationale": "The question targets financial performance over a defined period, requiring temporal reasoning based on reported growth."
+        },
+        {
+            "question": "How has Apple's cash and marketable securities position changed between September 2022 and September 2023, and what does this indicate about its liquidity and capital return strategy?",
+            "rationale": "The question compares specific balance sheet metrics at two known time points to infer financial strategy."
+        },
+        {
+            "question": "What measurable progress has Apple made since announcing its 2030 carbon neutrality goal, and how have its environmental programs developed from 2020 to 2023?",
+            "rationale": "This explicitly references a time span leading to a future goal, prompting evaluation of ongoing ESG efforts."
+        },
+        {
+            "question": "How has Apple's legal and tax compliance exposure changed over the past five years, particularly in relation to antitrust investigations in the U.S. and other jurisdictions?",
+            "rationale": "This spans a multi-year period and asks for a historical analysis of regulatory and legal trends."
+        }
+    ]
 
     ### Input for your task:
 """

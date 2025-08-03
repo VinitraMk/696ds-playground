@@ -45,7 +45,6 @@ GROUNDING_EVALUATION_PROMPT = """
     Your evaluation must be based on **five binary criteria**. For each criterion, assign a score of `1` (Yes) if the requirement is fully met, or `0` (No) if it is not. After scoring, provide a **brief justification** for the overall evaluation.
     State the reason for the scores must be explained in the "justification".
 
-    ---
     ### Evaluation Criteria:
 
     1. **Entity Relevance**  
@@ -61,11 +60,9 @@ GROUNDING_EVALUATION_PROMPT = """
     Are critical numbers (e.g., statistics, dates, financial figures) relevant to the entity correctly included in the groundings?
 
     5. **Non‑Redundancy**  
-    Are the groundings avoiding unnecessary repetition or duplication?
+    Are the groundings concise, avoiding unnecessary repetition or duplication?
 
-    ---
-
-    Return your evaluation in **strict JSON format**:
+    ### Output format (JSON):
     Evaluation: {{
         "evaluation": {{
             "entity_relevance": 0 or 1,
@@ -76,8 +73,6 @@ GROUNDING_EVALUATION_PROMPT = """
             "justification": "brief reason"
         }}
     }}
-
-    ---
 
     ### Input for your task:
     **Entity**: {entity}
