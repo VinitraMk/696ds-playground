@@ -1,8 +1,9 @@
 TMP_QSTN_INSTRUCTION_PROMPT = """
     ### Task:
-    Given a list of groundings (long-form summaries related to a specific entity), along with the entity name and associated metadata, generate 5 complex multi-hop questions that require reasoning across multiple groundings.
+    Given a list of groundings (long-form summaries related to a specific entity), along with the entity name and associated metadata, generate exactly *1* complex multi-hop question that requires reasoning across multiple groundings.
 
-    Ensure that the questions are temporal in nature—they should address topics, facts, or data points that exhibit changes over time as described in the groundings. These questions should involve explicit inference or comparison of topics or events across time-periods, specify the said time periods in some way.
+    Ensure that the generated question is temporal in nature i.e answering it should involve analysis of the values of one or more variables evolve over time.
+    The question should explicitly reference time periods (e.g., years, quarters, trends) and require reasoning about temporal change or patterns.
 
     Refer to the examples of temporal questions provided in the prompt to understand the characteristics strong temporal questions and rationale behind why they are temporal in nature.
 
@@ -39,7 +40,7 @@ TMP_QSTN_INSTRUCTION_PROMPT = """
     Entity: Apple Inc.
 
     ### Examples of temporal-based questions:
-    "queries": [
+    [
         {
             "question": "How did Apple's business operations and financial condition change between 2022 and 2023 in response to global economic conditions and market competition?",
             "rationale": "This question explicitly compares two fiscal years and asks about changes in external conditions and internal performance."

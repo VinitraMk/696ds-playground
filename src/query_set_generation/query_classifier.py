@@ -16,8 +16,8 @@ from groq import AsyncGroq
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
 from src.prompts.query_set_generation.question_classifier import QSTN_CLASSIFIER_PROMPT
-from consts.company_consts import COMPANY_DICT
-import consts.consts
+from src.consts.company_consts import COMPANY_DICT
+from src.consts.consts import HF_CACHE_DIR, MODELS
 
 
 class QueryClassifier:
@@ -93,6 +93,7 @@ class QueryClassifier:
             print('generated response: ', summary)
         elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
             summary = execute_groq_task_api(self.llm, json_schema, instruction_prompts, system_prompt)
+            summary = [robj['response'] for robj in summary]
             print('generated response: ', summary[0])
         else:
             prompt_tokens = [get_prompt_token(instruction_prompts[0], system_prompt, self.tokenizer)]
@@ -133,7 +134,8 @@ class QueryClassifier:
         qclass_summary = self.__get_output_from_llm([qstn_classification_prompt], qstn_classification_system_prompt, qclass_json_schema)
         qclass_json = extract_json_array_by_key(qclass_summary[0], "categories")
         if qclass_json != None and len(qclass_json) > 0:
-            categories = list(map(lambda q: QUERY_TYPE_MAP[q], qclass_json))
+            #categories = list(map(lambda q: QUERY_TYPE_MAP[q], qclass_json))
+            categories = qclass_json
             
         return categories
 

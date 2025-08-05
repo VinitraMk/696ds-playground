@@ -93,7 +93,7 @@ COMPANY_DICT =  {
     },
     "AMD": {
         "filename": "10-K_AMD_20231230",
-        "company_name": ""
+        "company_name": "AMD Inc."
     },
     "AME": {
         "filename": "10-K_AME_20231231",
@@ -925,7 +925,7 @@ COMPANY_DICT =  {
     },
     "INTC": {
         "filename": "10-K_INTC_20231230",
-        "company_name": ""
+        "company_name": "Intel Corp."
     },
     "INTU": {
         "filename": "10-K_INTU_20240731",
@@ -1333,7 +1333,7 @@ COMPANY_DICT =  {
     },
     "NVDA": {
         "filename": "10-K_NVDA_20240128",
-        "company_name": ""
+        "company_name": "Nvidia"
     },
     "NVR": {
         "filename": "10-K_NVR_20231231",

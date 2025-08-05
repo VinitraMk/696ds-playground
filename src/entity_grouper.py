@@ -6,6 +6,7 @@ import json
 import re
 import os
 import gc
+import matplotlib.pyplot as plt
 
 #custom imports
 from src.consts.company_consts import COMPANY_DICT
@@ -70,8 +71,8 @@ class EntityGrouper:
         else:
             raise SystemExit('Invalid model index passed!')
 
-    def group_entities(self, no_of_entities = 5, no_of_companies = 3):
-        companies_to_anchor = ['NVDA', 'AMD', 'INTC', 'TSLA', 'F', 'GM']
+
+    def identify_common_entities(self, companies_to_anchor):
         chunk_store_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}'
         
         entities_intersection = []
@@ -95,6 +96,7 @@ class EntityGrouper:
         print('no of common entities: ', len(entities_intersection_set))
         company_common_entities_info = {}
         optimum_range_count = 0
+        optimal_entities = []
         for ek in entities_intersection:
             ek_count = 0
             for cp in companies_to_anchor:
@@ -108,7 +110,10 @@ class EntityGrouper:
 
                 if ek not in company_common_entities_info:
                     company_common_entities_info[ek] = {
-                        
+                        f'{cp}': {
+                            'count': company_entities_info[ek]['count'],
+                            'chunk_indices': company_entities_info[ek]['chunk_indices']
+                        }
                     }
                 else:
                     company_common_entities_info[ek][cp] = {
@@ -120,9 +125,52 @@ class EntityGrouper:
                     ek_count += 1
             if ek_count == 3:
                 optimum_range_count += 1
+                optimal_entities.append(ek)
+
         print('Entities in optimal range count (5, 20): ', optimum_range_count)
         with open('./company_common_entities_info.json', 'w') as fp:
             json.dump(company_common_entities_info, fp)
+        with open('./sampled_common_entities.json', 'w') as fp:
+            json.dump({'docs_considered': companies_to_anchor, 'common_entities': optimal_entities}, fp)
+
+    def get_entity_doc_histogram(self, companies_pool):
+        all_comp_entities = {}
+        data_folder_path = 'data/chunked_data/global_chunk_store/llama'
+        all_entities = []
+        entities_to_doc = {}
+        for cp in companies_pool:
+            data_path = os.path.join(data_folder_path, f'{COMPANY_DICT[cp]["filename"]}_entities_info.json')
+            with open(data_path, 'r') as fp:
+                entities_info = json.load(fp)
+            all_comp_entities[cp] = list(entities_info.keys())
+            all_entities.extend(list(entities_info.keys()))
+        
+        for ek in all_entities:
+            entities_to_doc[ek] = 0
+            for cp in companies_pool:
+                if ek in all_comp_entities[cp]:
+                    entities_to_doc[ek] += 1
+
+        doc_hist = [0] * len(companies_pool)
+        entity_doc_vals = list(entities_to_doc.values())
+        for c in range(len(companies_pool)):
+            co = entity_doc_vals.count(c+1)
+            doc_hist[c] = co
+        plt.bar(list(range(2, len(companies_pool) + 1)), doc_hist[1:])
+        print(doc_hist)
+        plt.xlabel('No of doc buckets')
+        plt.ylabel('No of entities in doc buckets')
+        plt.title('Entities to doc count')
+        plt.savefig('entities_to_doc_hist.png')
+        with open('all_comp_entity_stats.json', 'w') as fp:
+            json.dump(entities_to_doc, fp)
+
+    def group_entities(self, no_of_entities = 5, no_of_companies = 3):
+        companies_pool = ['NVDA', 'AMD', 'INTC', 'TSLA', 'F', 'GM']
+        companies_to_anchor = ['NVDA', 'AMD', 'INTC']
+        #self.identify_common_entities(companies_to_anchor)
+        self.get_entity_doc_histogram(companies_pool)
+        
         
     def destroy(self):
         #del self.llm

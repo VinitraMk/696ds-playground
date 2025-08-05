@@ -1,0 +1,234 @@
+{
+    "common_entities": [
+        "Ai",
+        "Intangible Assets",
+        "Data Center",
+        "Suppliers",
+        "Net Income",
+        "China",
+        "Climate Change",
+        "Litigation",
+        "Oems",
+        "Gpus",
+        "Common Stock",
+        "Form 10-K",
+        "Board Of Directors",
+        "Table Of Contents",
+        "Supply Chain",
+        "Revenue",
+        "Inventory",
+        "Equipment"
+    ],
+    "optimal_entities": {
+        "10-K_NVDA_20240128": [
+            {
+                "entity": "Litigation",
+                "groundings_token_count": 963.0
+            },
+            {
+                "entity": "Intangible Assets",
+                "groundings_token_count": 1009.0
+            },
+            {
+                "entity": "Net Income",
+                "groundings_token_count": 1424.0
+            },
+            {
+                "entity": "Common Stock",
+                "groundings_token_count": 1614.0
+            },
+            {
+                "entity": "Climate Change",
+                "groundings_token_count": 1999.0
+            },
+            {
+                "entity": "Suppliers",
+                "groundings_token_count": 2172.0
+            },
+            {
+                "entity": "Oems",
+                "groundings_token_count": 2246.0
+            },
+            {
+                "entity": "Board Of Directors",
+                "groundings_token_count": 3212.0
+            },
+            {
+                "entity": "Ai",
+                "groundings_token_count": 3277.0
+            },
+            {
+                "entity": "Equipment",
+                "groundings_token_count": 3533.0
+            },
+            {
+                "entity": "Data Center",
+                "groundings_token_count": 3553.0
+            },
+            {
+                "entity": "Form 10-K",
+                "groundings_token_count": 4371.0
+            },
+            {
+                "entity": "Inventory",
+                "groundings_token_count": 4428.0
+            },
+            {
+                "entity": "Gpus",
+                "groundings_token_count": 4930.0
+            },
+            {
+                "entity": "Supply Chain",
+                "groundings_token_count": 5131.0
+            },
+            {
+                "entity": "China",
+                "groundings_token_count": 5976.0
+            },
+            {
+                "entity": "Revenue",
+                "groundings_token_count": 8866.0
+            }
+        ],
+        "10-K_AMD_20231230": [
+            {
+                "entity": "Oems",
+                "groundings_token_count": 727.0
+            },
+            {
+                "entity": "Intangible Assets",
+                "groundings_token_count": 1170.0
+            },
+            {
+                "entity": "Net Income",
+                "groundings_token_count": 1420.0
+            },
+            {
+                "entity": "Board Of Directors",
+                "groundings_token_count": 1504.0
+            },
+            {
+                "entity": "Gpus",
+                "groundings_token_count": 2017.0
+            },
+            {
+                "entity": "Form 10-K",
+                "groundings_token_count": 2052.0
+            },
+            {
+                "entity": "Data Center",
+                "groundings_token_count": 2109.0
+            },
+            {
+                "entity": "Ai",
+                "groundings_token_count": 2158.0
+            },
+            {
+                "entity": "Litigation",
+                "groundings_token_count": 2225.0
+            },
+            {
+                "entity": "China",
+                "groundings_token_count": 2410.0
+            },
+            {
+                "entity": "Suppliers",
+                "groundings_token_count": 2431.0
+            },
+            {
+                "entity": "Equipment",
+                "groundings_token_count": 2713.0
+            },
+            {
+                "entity": "Inventory",
+                "groundings_token_count": 2734.0
+            },
+            {
+                "entity": "Revenue",
+                "groundings_token_count": 2854.0
+            },
+            {
+                "entity": "Climate Change",
+                "groundings_token_count": 2863.0
+            },
+            {
+                "entity": "Common Stock",
+                "groundings_token_count": 2972.0
+            },
+            {
+                "entity": "Supply Chain",
+                "groundings_token_count": 3502.0
+            }
+        ],
+        "10-K_INTC_20231230": [
+            {
+                "entity": "Intangible Assets",
+                "groundings_token_count": 885.0
+            },
+            {
+                "entity": "Climate Change",
+                "groundings_token_count": 1405.0
+            },
+            {
+                "entity": "China",
+                "groundings_token_count": 1531.0
+            },
+            {
+                "entity": "Net Income",
+                "groundings_token_count": 1584.0
+            },
+            {
+                "entity": "Data Center",
+                "groundings_token_count": 1839.0
+            },
+            {
+                "entity": "Equipment",
+                "groundings_token_count": 1900.0
+            },
+            {
+                "entity": "Revenue",
+                "groundings_token_count": 2245.0
+            },
+            {
+                "entity": "Oems",
+                "groundings_token_count": 2263.0
+            },
+            {
+                "entity": "Suppliers",
+                "groundings_token_count": 2284.0
+            },
+            {
+                "entity": "Board Of Directors",
+                "groundings_token_count": 2351.0
+            },
+            {
+                "entity": "Common Stock",
+                "groundings_token_count": 2950.0
+            },
+            {
+                "entity": "Ai",
+                "groundings_token_count": 3098.0
+            },
+            {
+                "entity": "Litigation",
+                "groundings_token_count": 3166.0
+            },
+            {
+                "entity": "Gpus",
+                "groundings_token_count": 3358.0
+            },
+            {
+                "entity": "Inventory",
+                "groundings_token_count": 4359.0
+            },
+            {
+                "entity": "Supply Chain",
+                "groundings_token_count": 4707.0
+            },
+            {
+                "entity": "Form 10-K",
+                "groundings_token_count": 4837.0
+            }
+        ]
+    }
+}

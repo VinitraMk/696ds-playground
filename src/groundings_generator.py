@@ -16,8 +16,8 @@ from groq import AsyncGroq
 from utils.string_utils import extract_json_array_by_key, is_valid_sentence, extract_json_text_by_key, extract_json_object_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
 from src.prompts.grounding_generation.grounding_prompts import GROUNDING_INSTRUCTION_PROMPT, GROUNDING_EVALUATION_PROMPT, GROUNDING_REFINEMENT_PROMPT
-from consts.company_consts import COMPANY_DICT
-import consts.consts
+from src.consts.company_consts import COMPANY_DICT
+from src.consts.consts import MODELS, HF_CACHE_DIR, IGNORE_ENTITIES, NO_OF_TRIALS
 
 class GroundingsGenerator:
 
@@ -89,6 +89,7 @@ class GroundingsGenerator:
 
     def __get_output_from_llm(self, instruction_prompts, system_prompt, json_schema = None, llm_config = None):
         summary = ""
+        summary_stats = []
         if self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
             prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompts[0], system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
             outputs = execute_llama_LLM_task(self.llm, prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
@@ -101,16 +102,19 @@ class GroundingsGenerator:
             summary = [execute_llama_task_api(self.llm, instruction_prompts[0], system_prompt)]
             print('generated response: ', summary)
         elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
-            
-            summary = execute_groq_task_api(self.llm, json_schema, instruction_prompts, system_prompt)
-            print('generated response: ', summary[0])
+            summaries = execute_groq_task_api(self.llm, json_schema, instruction_prompts, system_prompt)
+            summary = [robj['response'] for robj in summaries]
+            for robj in summaries:
+                new_obj = {k: v for k, v in robj.items() if k != "response"}
+                summary_stats.append(new_obj)
+            print('generated response: ', summaries[0])
         else:
             prompt_tokens = [get_prompt_token(instruction_prompts[0], system_prompt, self.tokenizer)]
             outputs = execute_LLM_tasks(self.llm, prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
             summary = [outputs[0].outputs[0].text.strip()]
             print(f'generated response: ', summary)
 
-        return summary
+        return summary, summary_stats
 
     def __generate_groundings(self, chunk_texts, entity, metadata):
         grounding_instruction_prompt = GROUNDING_INSTRUCTION_PROMPT
@@ -179,7 +183,7 @@ class GroundingsGenerator:
 
             #initial groundings
             grounding_system_prompt = "You are a helpful assistant that given a chunk of text, an entity and some metadata about the text, returns groundings which are summarized statements related to the entity."
-            gsummary = self.__get_output_from_llm([grounding_instruction_prompt], grounding_system_prompt, groundings_json_schema)
+            gsummary, gstats = self.__get_output_from_llm([grounding_instruction_prompt], grounding_system_prompt, groundings_json_schema)
 
             gjson_arr = extract_json_array_by_key(gsummary[0], "groundings")
 
@@ -196,9 +200,10 @@ class GroundingsGenerator:
                     metadata = metadata,
                     groundings = grounding_str)
 
-                esummary = self.__get_output_from_llm([eval_prompt_text], evaluation_system_prompt, evaluation_json_schema)
+                esummary, _ = self.__get_output_from_llm([eval_prompt_text], evaluation_system_prompt, evaluation_json_schema)
                 evaluation_obj = extract_json_object_by_key(esummary[0], "evaluation")
                 eval_best = evaluation_obj
+                gbest_stats = gstats
                 ts = evaluation_obj['entity_relevance'] + evaluation_obj['source_faithfulness'] + evaluation_obj['key_info_coverage'] + evaluation_obj['numeric_recall'] + evaluation_obj['non_redundancy']
                 #sleep(90)
 
@@ -212,7 +217,7 @@ class GroundingsGenerator:
                     chunk_text = chunk_texts[gi]['text']
                     grounding_refinement_prompt = GROUNDING_REFINEMENT_PROMPT + f"\nText: {chunk_text}\nEntity: {entity}\nMetadata: {metadata}\nGroundings: {grounding_str}\nEvaluation: {eval_str}"
                     grounding_refinement_system_prompt = "You are a helpful assistant that given a chunk of text, an entity, some metadata about the text, groundings which are summarized statements related to the entity and their evaluation, returns an improved set of groundings"
-                    grsummary = self.__get_output_from_llm([grounding_refinement_prompt], grounding_refinement_system_prompt, groundings_json_schema)
+                    grsummary, gstats = self.__get_output_from_llm([grounding_refinement_prompt], grounding_refinement_system_prompt, groundings_json_schema)
                     gjson_arr_improved = extract_json_array_by_key(grsummary[0], "groundings")
                     #sleep(90)
 
@@ -224,31 +229,42 @@ class GroundingsGenerator:
                             chunk = chunk_texts[gi]['text'],
                             metadata = metadata,
                             groundings = grounding_str)
-                        esummary = self.__get_output_from_llm([eval_prompt_text], evaluation_system_prompt, evaluation_json_schema)
+                        esummary, _ = self.__get_output_from_llm([eval_prompt_text], evaluation_system_prompt, evaluation_json_schema)
                         evaluation_obj = extract_json_object_by_key(esummary[0], "evaluation")
                         ts = evaluation_obj['entity_relevance'] + evaluation_obj['source_faithfulness'] + evaluation_obj['key_info_coverage'] + evaluation_obj['numeric_recall'] + evaluation_obj['non_redundancy']
                         if ts > tsmax:
                             tsmax = ts
                             gjson_arr_best = gjson_arr_improved
                             eval_best = evaluation_obj
+                            gbest_stats = gstats
                         no_of_attempts+=1
                     #sleep(90)
 
                 # best grounding cleanup
                 if gjson_arr_best!= None and len(gjson_arr_best) > 0:
                     clean_g = self.__extract_and_clean_groundings(gjson_arr_best)
+                    gop_avg = gbest_stats[0]['output_tokens'] / len(clean_g)
                     for gc in clean_g:
-                        groundings.append({'text': gc, 'entity': entity})
+                        groundings.append({'text': gc, 'entity': entity, 'average_output_tokens': gop_avg})
             
             groundings_set[chunk_texts[gi]['chunk_index']] = groundings
 
         return groundings_set
 
     def __sample_entities(self, entities_info, count_range = (5, 15), k = 10):
+        '''
         entities_to_ignore = [ek.lower() for ek in IGNORE_ENTITIES]
         relevant_entities = {ek: entities_info[ek] for ek in entities_info.keys() if (ek.lower() not in entities_to_ignore) and (entities_info[ek]['count'] >= count_range[0]) and (entities_info[ek]['count'] <= count_range[1])}
         min_k = min(len(relevant_entities), k)
         sampled_entities = random.sample(relevant_entities.keys(), min_k)
+        return sampled_entities
+        '''
+        with open('./sampled_common_entities.json', 'r') as fp:
+            sampled_common_entities = json.load(fp)["common_entities"]
+
+        entities_to_ignore = [ek.lower() for ek in IGNORE_ENTITIES]
+        relevant_entities = [ek for ek in sampled_common_entities if ek.lower() not in entities_to_ignore]
+        sampled_entities = relevant_entities
         return sampled_entities
 
     def set_filename(self, filename):
@@ -292,6 +308,7 @@ class GroundingsGenerator:
                     groundings_status_info = json.load(fp)
             else:
                 groundings_status_info = {}
+            entities_groundings_token_map = []
             for ek in sampled_entity_keys:
                 if ek in groundings_status_info and groundings_status_info[ek] == "completed":
                     continue
@@ -299,16 +316,21 @@ class GroundingsGenerator:
                 chunk_indices = entity_store[ek]["chunk_indices"]
                 #chunk_entities = chunk_store_arr[ci]['entities']
                 print(f'No of chunks for entity {ek}: ', len(chunk_indices))
+                grounding_token_count = 0
                 for cix in range(0, len(chunk_indices), self.prompt_batch_size):
                     cix_batch = chunk_indices[cix:cix+self.prompt_batch_size]
                     chunk_texts = [{ 'chunk_index': ci, 'text': chunk_arr[ci]} for ci in cix_batch]
                     entity_groundings = self.__generate_groundings(chunk_texts = chunk_texts, entity=ek, metadata=metadata)
                     for ci in cix_batch:
                         print(f'Grounding for {ek} in chunk {ci}: ', entity_groundings[ci])
-                        if 'groundings' in chunk_store_arr[ci]:
+                        if 'groundings' in chunk_store_arr[ci] and 'groundings_token_count' in chunk_store_arr[ci]:
                             chunk_store_arr[ci]['groundings'].extend(entity_groundings[ci])
+                            chunk_store_arr[ci]['groundings_token_count'] += sum(map(lambda x: x['average_output_tokens'], entity_groundings[ci]))
                         else:
                             chunk_store_arr[ci]['groundings'] = entity_groundings[ci]
+                            chunk_store_arr[ci]['groundings_token_count'] = sum(map(lambda x: x['average_output_tokens'], entity_groundings[ci]))
+                        grounding_token_count += chunk_store_arr[ci]['groundings_token_count']
+                entities_groundings_token_map.append({'entity': ek, 'groundings_token_count': grounding_token_count})
                 groundings_status_info[ek] = "completed"
                 chunk_store["chunks"] = chunk_store_arr
                 with open(chunk_store_fp, 'w') as fp:
@@ -316,6 +338,12 @@ class GroundingsGenerator:
                 with open(groundings_status_fp, 'w') as fp:
                     json.dump(groundings_status_info, fp)
             groundings_status_info = {}
+            entities_groundings_token_map = sorted(entities_groundings_token_map, key = lambda x: x['groundings_token_count'])
+            with open('./sampled_common_entities.json', 'r') as fp:
+                sampled_entities_obj = json.load(fp)
+            sampled_entities_obj['optimal_entities'][self.filename] = entities_groundings_token_map
+            with open('./sampled_common_entities.json', 'w') as fp:
+                json.dump(sampled_entities_obj, fp)
             with open(groundings_status_fp, 'w') as fp:
                 json.dump(groundings_status_info, fp)
         else:

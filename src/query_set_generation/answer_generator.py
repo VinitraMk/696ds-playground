@@ -16,8 +16,8 @@ from groq import AsyncGroq
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
 from src.prompts.query_set_generation.answer_prompt import ANSWER_INSTRUCTION_PROMPT
-from consts.company_consts import COMPANY_DICT
-import consts.consts
+from src.consts.company_consts import COMPANY_DICT
+from src.consts.consts import HF_CACHE_DIR, MODELS
 
 class AnswerGenerator:
 
@@ -92,6 +92,7 @@ class AnswerGenerator:
             print('generated response: ', summary)
         elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
             summary = execute_groq_task_api(self.llm, json_schema, instruction_prompts, system_prompt)
+            summary = [robj['response'] for robj in summary]
             print('generated response: ', summary[0])
         else:
             prompt_tokens = [get_prompt_token(instruction_prompts[0], system_prompt, self.tokenizer)]
@@ -140,7 +141,11 @@ class AnswerGenerator:
 
         ans_instruction_prompt = ANSWER_INSTRUCTION_PROMPT
 
-        groundings_str = f"[{','.join(qg_pair['groundings'])}]" 
+        groundings_str = json.dumps(
+            [{"text": item["text"], "company_name": item["company_name"]} for item in qg_pair['groundings']],
+            indent=2
+        )    
+        #groundings_str = f"[{','.join(qg_pair['groundings'])}]" 
         ans_instruction_prompt = ans_instruction_prompt + f"\nQuery: {qg_pair['query']}\nEntity: {entity}\nMetadata: {metadata}\nGroundings : {groundings_str}"
         ans_system_prompt = "You are a helpful assistant, that given a query and list of groundings (citations related to the query), generates meaningful answer to the question."
         qna_pair = {}
@@ -193,14 +198,15 @@ class AnswerGenerator:
 
             metadata = f'Company: {self.company_name} | SEC Filing: 10-K'
             print('\nStarting answer generation for batch of questions\n')
-            sampled_entities = list(query_arr.keys())
+            #sampled_entities = list(query_arr.keys())
+            sampled_entities = ["Ai", "Intangible Assets", "Data Center"]
             for ei in range(no_of_entities):
                 entity = sampled_entities[ei]
                 filtered_queries = query_arr[entity]
                 #filtered_queries = [qobj for qobj in filtered_queries if "answer" not in qobj]
                 for qi, query_obj in enumerate(filtered_queries):
                     if "answer" not in query_obj:
-                        grounding_texts = [gr['text'] for gr in query_obj["groundings"]]
+                        grounding_texts = [{ 'text': gr['text'], 'company_name': gr['company_name'] } for gr in query_obj["groundings"]]
                         qng_pair = { 'query': query_obj['query'], "groundings": grounding_texts }
                         qobj = self.__generate_answer(qg_pair=qng_pair, metadata=metadata, entity=entity)
                         if 'answer' in qobj:

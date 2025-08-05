@@ -1,12 +1,11 @@
-CMP_QSTN_INSTRUCTION_PROMPT = """
+EVTINT_QSTN_INSTRUCTION_PROMPT = """
     ### Task:
-    You are given the following inputs:
-    - A list of groundings (long-form summaries related to a specific entity)
-    - The target entity
-    - Associated metadata
-    Your task is to generate 5 complex, multi-hop questions that require reasoning across multiple groundings. Each question must be comparison-based, meaning it should involve strong and direction comparison of subjects, topics, or entities.
+    Given a list of groundings (long summaries related to given entity), entity and metadata, generate exactly *1* complex multi-hop question that requires reasoning over multiple groundings.
 
-    Refer to the example of comparison-based questions in the prompt to understand the rationale behind effective comparison-based questions.
+    Ensure that the generated question should involve event interaction analysis i.e answering it involves exploring how events or developments influence each other.
+    These questions should involve understanding causal, sequential, or correlative relationships between events or actions described in the text.
+
+    Refer to the example of questions in the prompt to understand the rationale behind why the questions involve event interaction analysis.
 
     Return only the list of generated questions as strings. Do not include any rationale, explanation, or metadata.
 
@@ -27,10 +26,9 @@ CMP_QSTN_INSTRUCTION_PROMPT = """
     Entity: <entity>
 
     ### Output format (TARGET JSON FORMAT):
-    "queries": [<a list strings consisting of complex questions generated from the given list of groundings>]
+    "queries": [<a list of complex questions generated from the given list of groundings>]
 
     ### Example Input
-
     Metadata: Company name: Apple | SEC Filing: 10-K
     Groundings: [
         "The 10-K filing notes that 'The Company’s business, results of operations and financial condition could be materially adversely affected by changes in global economic conditions.' It also states that 'The Company is subject to intense competition in all markets in which it operates,' highlighting exposure to industry dynamics. Apple points out reliance on third-party suppliers and manufacturers, stating, 'The Company depends on component and product manufacturing and logistical services provided by outsourcing partners.",
@@ -41,28 +39,27 @@ CMP_QSTN_INSTRUCTION_PROMPT = """
     ]
     Entity: Apple Inc.
 
-    ### Examples of comparison-based queries:
-
-    "queries": [
+    ### Examples of event interaction analysis queries:
+    [
         {
-            "question": "How does Apple’s reported financial performance in 2023 compare to the potential risks identified in its 10-K, such as economic uncertainty and competition?",
-            "rationale": "Juxtaposes Apple’s strong sales and innovation spending with risks from macroeconomic changes and competitive pressures to assess business resilience.",
+            "question": "How have global economic changes influenced Apple's reliance on third-party suppliers, and what downstream effects have these dependencies had on its operations and financial results?",
+            "rationale": "This analyzes how one external event (global economic conditions) influences another (Apple’s supply chain strategy), and their cascading effects on performance."
         },
         {
-            "question": "In what ways does Apple’s revenue growth in iPhone and Services segments compare to its rising R&D expenditures, and what does this suggest about its strategic investment priorities?",
-            "rationale": "Here, sales performance is contrasted with innovation spending, both cited in the filings. This prompts reasoning about whether investment is keeping pace with revenue growth or being front-loaded for future returns."
+            "question": "In what ways does increased R&D expenditure interact with fluctuations in gross margin, and how might both events be influenced by changes in product mix and component costs?",
+            "rationale": "This explores how multiple internal events—R&D spending, margin fluctuations, and product composition—interact to shape financial outcomes."
         },
         {
-            "question": "How does Apple’s gross margin variability compare across hardware product categories versus software and services, considering component costs and product mix?",
-            "rationale": "The question invites comparison between hardware vs. services profitability, using the filing's mention of fluctuating margins and component costs. It pushes for an evaluation of structural differences in Apple's business segments."
+            "question": "How do Apple's legal proceedings and regulatory investigations impact its capital return strategy and financial stability?",
+            "rationale": "This question connects legal/regulatory events with financial planning actions, requiring reasoning over cause-effect chains between different corporate events."
         },
         {
-            "question": "In what ways do Apple’s environmental impact strategies differ from its legal risk mitigation strategies, particularly in how they shape public perception and regulatory engagement?",
-            "rationale": "This compares two non-financial strategies—one proactive (ESG), the other reactive (legal compliance)—both of which affect brand image and long-term risk posture."
+            "question": "How does the company's pursuit of carbon neutrality by 2030 interact with its use of recycled content and emissions reduction efforts, and what cumulative impact might these events have on Apple's ESG performance?",
+            "rationale": "This looks at the interdependencies between different sustainability initiatives and how they work together to achieve long-term environmental goals."
         },
         {
-            "question": "How does Apple’s use of recycled content and emissions reduction compare to its historical practices in product design and material sourcing?",
-            "rationale": "This encourages a temporal comparison between past vs. current sustainability practices, grounded in the company’s disclosures about recycled materials and emissions."
+            "question": "How do tax compliance exposures in foreign jurisdictions influence Apple's ability to allocate cash toward dividends and share repurchases?",
+            "rationale": "The question relates how regulatory exposure (event 1) affects financial allocation strategies (event 2), requiring analysis of interaction across domains."
         }
     ]
 

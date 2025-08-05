@@ -98,7 +98,7 @@ def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, te
                         response_format=response_format,
                         stop=None,
                     )
-                    results.append(completion.choices[0].message.content)
+                    results.append({'response': completion.choices[0].message.content, 'prompt_tokens': completion.usage.prompt_tokens, 'output_tokens': completion.usage.completion_tokens })
                     success = True
                     break
 

@@ -16,8 +16,8 @@ from groq import AsyncGroq
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
 from src.prompts.query_set_generation.citation_prompt import CITATION_INSTRUCTION_PROMPT
-from consts.company_consts import COMPANY_DICT
-import consts.consts
+from src.consts.company_consts import COMPANY_DICT
+from src.consts.consts import MODELS, HF_CACHE_DIR
 
 
 class CitationGenerator:
@@ -93,6 +93,7 @@ class CitationGenerator:
             print('generated response: ', summary)
         elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
             summary = execute_groq_task_api(self.llm, json_schema, instruction_prompts, system_prompt)
+            summary = [robj['response'] for robj in summary]
             print('generated response: ', summary[0])
         else:
             prompt_tokens = [get_prompt_token(instruction_prompts[0], system_prompt, self.tokenizer)]
@@ -157,7 +158,8 @@ class CitationGenerator:
 
             metadata = f'Company: {self.company_name} | SEC Filing: 10-K'
             print('\nStarting answer generation for batch of questions\n')
-            sampled_entities = list(query_arr.keys())
+            #sampled_entities = list(query_arr.keys())
+            sampled_entities = ["Ai", "Intangible Assets", "Data Center"]
             print('\nSampled entities: ', sampled_entities)
             less_hop_qstns = []
             for ei in range(no_of_entities):
@@ -165,15 +167,23 @@ class CitationGenerator:
                 filtered_queries = query_arr[entity]
                 for qi, query_obj in enumerate(filtered_queries):
                     chunks_used = query_obj["chunks_used"]
+                    docs_considered = query_obj['docs_considered']
+
                     all_citations = []
                     cited_chunks = []
                     qna_pair = { 'query': query_obj['query'], 'answer': query_obj['answer'] }
-                    for ci in chunks_used:
-                        chunk = chunk_store[ci]
-                        chunk_citations = self.__generate_citations(chunk = chunk, qna_pair = qna_pair, metadata = metadata)
-                        if len(chunk_citations) > 0:
-                            all_citations.extend(chunk_citations)
-                            cited_chunks.append(ci)
+                    for cmp in docs_considered:
+                        rel_chunks = [cobj['chunk_index'] for cobj in chunks_used if cobj['company_code'] == cmp]
+                        cmp_filename = COMPANY_DICT[cmp]['filename']
+                        with open(os.path.join('data/chunked_data/chunks', f'{cmp_filename}_chunked.json'), 'r') as fp:
+                            cmp_chunk_store = json.load(fp)["chunks"]
+                        for ci in rel_chunks:
+                            chunk = cmp_chunk_store[ci]
+                            chunk_citations = self.__generate_citations(chunk = chunk, qna_pair = qna_pair, metadata = metadata)
+                            print('generated citations', len(chunk_citations), chunk_citations)
+                            if len(chunk_citations) > 0:
+                                all_citations.extend(chunk_citations)
+                                cited_chunks.append({ 'company_name': cmp, 'chunk_index': ci})
                     if len(cited_chunks) < 5:
                         less_hop_qstns.append({ 'entity': entity, 'query': query_obj['query'], 'answer': query_obj['answer'], 'groundings': query_obj['groundings'], 'citations': all_citations, 'chunks_used': cited_chunks })
                     filtered_queries[qi] = query_obj | { 'citations': all_citations, 'chunks_used': cited_chunks }

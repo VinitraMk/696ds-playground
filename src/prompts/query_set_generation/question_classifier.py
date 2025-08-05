@@ -1,20 +1,20 @@
 QSTN_CLASSIFIER_PROMPT = """
     ### Task
     You are a question classification expert. Your task is to classify each question into one or more of the following categories:
-	- Inference: The question requires reasoning beyond explicit facts, such as deducing implications or making judgments.
-    - Comparison: The question compares two or more entities, time periods, or concepts.
-    - Temporal: The question involves changes, trends, or events over time.
-	- None: The question does not clearly fall into any of the above categories.
+    - temporal_analysis: these are questions that analyze how the values of one or more variables evolve over time. These questions should explicitly reference time periods (e.g., years, quarters, trends) and require reasoning about temporal change or patterns.
+    - numerical_analysis: these questions that require computational or quantitative reasoning over multiple numerical variables. These should focus on evaluating amounts, rates, percentages, fluctuations, or other measurable quantities.
+    - entity_interaction_analysis: these questions that examine how different entities (e.g., companies, products, partners) relate to or affect one another. These questions should involve retrieving multiple facts and reasoning about the interplay or relationships between these entities.
+    - event_interaction_analysis: these questions that explore how events or developments influence each other. These questions should involve understanding causal, sequential, or correlative relationships between events or actions described in the text.
+    - summarization: these questions require generating a summary of the key information across multiple pieces of text. These questions should focus on extracting high-level insights or core messages without deep analysis.
+	- none: The question does not clearly fall into any of the above categories.
 
-    For the question:
-	Return the category or categories it belongs to (e.g., [“Inference”, “Temporal”]).
-    If it belongs to 'None' class the categories array should only have the string 'None'.
+    For the given question return the category or categories it belongs.
 
     ### Input Format:
     - Question: <question text>
 
     ### Output Format (JSON):
-    "categories": [<list of question categories>]    
+    "categories": [<list of categories the question belongs to>]    
 
     ### Input for your task:
 """

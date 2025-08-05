@@ -29,12 +29,14 @@ FILENAMES = [
 ]
 
 IGNORE_ENTITIES = ['Table of Contents', 'SEC', '10-K filings', 'SEC 10-K filings', 'SEC 10-K', 'SEC (Securities and Exchange Commission)', 'Notes', 'Item 1A', 'Part IV, Item 15', 'Item 601(b)(32)(ii)', 'Item 15', 'Item']
-MAX_GROUNDINGS_TO_SAMPLE = 35
+MAX_GROUNDINGS_TO_SAMPLE = 50
 MIN_GROUNDINGS_NEEDED_FOR_GENERATION = 10
 
+'''
 QUERY_TYPE_MAP = {
     'Inference': 'INF',
     'Temporal': 'TMP',
     'Comparison': 'CMP',
     'None': 'None'
 }
+'''

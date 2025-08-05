@@ -8,6 +8,7 @@ from time import time, sleep
 import sys
 import argparse
 import gc
+import random
 from google import genai
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 from together import Together
@@ -15,11 +16,13 @@ from groq import AsyncGroq
 
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
 from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
-from src.prompts.query_set_generation.inference_question_prompt import INF_QSTN_INSTRUCTION_PROMPT
-from src.prompts.query_set_generation.comparison_question_prompt import CMP_QSTN_INSTRUCTION_PROMPT
-from src.prompts.query_set_generation.temporal_question_prompt import TMP_QSTN_INSTRUCTION_PROMPT
-from consts.company_consts import COMPANY_DICT
-import consts.consts
+from src.prompts.query_set_generation.summarization_question_prompt import SUMM_QSTN_INSTRUCTION_PROMPT
+from src.prompts.query_set_generation.temporal_analysis_question_prompt import TMP_QSTN_INSTRUCTION_PROMPT
+from src.prompts.query_set_generation.entity_interaction_analysis_question_prompt import ETINT_QSTN_INSTRUCTION_PROMPT
+from src.prompts.query_set_generation.event_interaction_analysis_question_prompt import EVTINT_QSTN_INSTRUCTION_PROMPT
+from src.prompts.query_set_generation.numerical_analysis_question_prompt import NUM_QSTN_INSTRUCTION_PROMPT
+from src.consts.company_consts import COMPANY_DICT
+from src.consts.consts import MODELS, HF_CACHE_DIR, MAX_GROUNDINGS_TO_SAMPLE, MIN_GROUNDINGS_NEEDED_FOR_GENERATION
 
 class QueryGenerator:
 
@@ -99,6 +102,7 @@ class QueryGenerator:
             print('generated response: ', summary)
         elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
             summary = execute_groq_task_api(self.llm, json_schema, instruction_prompts, system_prompt)
+            summary = [robj['response'] for robj in summary]
             print('generated response: ', summary[0])
         else:
             prompt_tokens = [get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)]
@@ -110,11 +114,17 @@ class QueryGenerator:
 
     def __generate_queries_in_single_prompt(self, groundings_doc_text, metadata, entity):
         
-        qstn_instruction_prompt = INF_QSTN_INSTRUCTION_PROMPT
-        if self.qstn_type == 'CMP':
-            qstn_instruction_prompt = CMP_QSTN_INSTRUCTION_PROMPT
-        elif self.qstn_type == 'TMP':
+        qstn_instruction_prompt = SUMM_QSTN_INSTRUCTION_PROMPT
+        if self.qstn_type == 'entity_interaction_analysis':
+            qstn_instruction_prompt = ETINT_QSTN_INSTRUCTION_PROMPT
+        elif self.qstn_type == 'temporal_analysis':
             qstn_instruction_prompt = TMP_QSTN_INSTRUCTION_PROMPT
+        elif self.qstn_type == 'event_interaction_analysis':
+            qstn_instruction_prompt = EVTINT_QSTN_INSTRUCTION_PROMPT
+        elif self.qstn_type == 'numerical_analysis':
+            qstn_instruction_prompt = NUM_QSTN_INSTRUCTION_PROMPT
+        else:
+            qstn_instruction_prompt = SUMM_QSTN_INSTRUCTION_PROMPT
 
         qstn_instruction_prompt = qstn_instruction_prompt + f"\nMetadata: {metadata}\nGroundings: {groundings_doc_text}\nEntity: {entity}"
         qstn_system_prompt = "You are a helpful assistant, that given a list of groundings, generates meaningful and complex questions from it."
@@ -150,6 +160,26 @@ class QueryGenerator:
     def set_filename(self, filename):
         self.filename = filename
         self.company_name = COMPANY_DICT[filename.split('_')[1]]
+
+    def merge_all_groundings(self, companies, entity):
+        
+        all_groundings = []
+        for cp in companies:
+            fn = COMPANY_DICT[cp]["filename"]
+            cp_name = COMPANY_DICT[cp]['company_name']
+            chunk_store_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{fn}_chunk_store.json'
+            with open(chunk_store_fp, 'r') as fp:
+                chunk_store = json.load(fp)
+            chunk_arr = chunk_store["chunks"]
+
+            for ci, chunk in enumerate(chunk_arr):
+                if "groundings" in chunk and len(chunk["groundings"]) > 0:
+                    filtered_groundings = [gobj for gobj in chunk["groundings"] if gobj['entity'].lower() == entity.lower()]
+                    for gi, gobj in enumerate(filtered_groundings):
+                        filtered_groundings[gi] = gobj | { 'company_code': cp, 'company_name': cp_name, 'chunk_index': ci }
+                    #all_groundings.append({'company_name': cp_name, 'chunk_index': ci, 'groundings': filtered_groundings})
+                    all_groundings.extend(filtered_groundings)
+        return all_groundings
         
     def generate_query(self, no_of_qstns = 5, no_of_entities = 20):
 
@@ -173,42 +203,70 @@ class QueryGenerator:
 
             print('length of the entire groundings array: ', len(all_groundings))
 
+            '''
             with open(sampled_entities_fp, 'r') as fp:
                 sampled_entities = json.load(fp)['sampled_entities']
+            '''
+            sampled_entities = ["Ai", "Intangible Assets", "Data Center"]
+            relevant_companies = ['NVDA', 'AMD', 'INTC']
 
-
-            metadata = f'Company: {self.company_name} | SEC Filing: 10-K'
+            metadata = f'SEC Filing: 10-K'
             all_resp = {}
             print('\nStarting query generation for batch of factoids\n')
             total_q = 0
+
             for ei in range(no_of_entities):
                 entity = sampled_entities[ei]
                 attempts = 0
                 all_resp[entity] = []
                 filtered_groundings = []
-
+                '''
                 for gobj in all_groundings:
                     ci = gobj['chunk_index']
                     rel_groundings = [{'chunk_index': ci, 'entity': entity, 'text': gr['text'] } for gr in gobj['groundings'] if gr['entity'] == entity]
                     filtered_groundings.extend(rel_groundings)
-
+                '''
+                
+                filtered_groundings = self.merge_all_groundings(relevant_companies, entity)
                 print(f'No of groundings under entity {entity}: ', len(filtered_groundings))
 
-                for fbi,i in enumerate(range(0, len(filtered_groundings), MAX_GROUNDINGS_TO_SAMPLE)):
-                    groundings_subarr = filtered_groundings[i:i+MAX_GROUNDINGS_TO_SAMPLE]
-                    if len(groundings_subarr) < MIN_GROUNDINGS_NEEDED_FOR_GENERATION:
-                        max_len = max(MAX_GROUNDINGS_TO_SAMPLE, len(filtered_groundings))
-                        groundings_subarr = filtered_groundings[-max_len:]
-                    chunks_used = list(set([gobj['chunk_index'] for gobj in groundings_subarr]))
-                    groundings_str = "[" + ",\n".join(f"{item['text']}" for item in groundings_subarr) + "]"
+                while len(all_resp[entity]) < no_of_qstns:
+                    '''
+                    if len(filtered_groundings) >= MAX_GROUNDINGS_TO_SAMPLE:
+                        groundings_subarr = random.sample(filtered_groundings, MAX_GROUNDINGS_TO_SAMPLE)
+                    elif len(filtered_groundings) >= MIN_GROUNDINGS_NEEDED_FOR_GENERATION and len(filtered_groundings) < MAX_GROUNDINGS_TO_SAMPLE:
+                        groundings_subarr = random.sample(filtered_groundings, MIN_GROUNDINGS_NEEDED_FOR_GENERATION)
+                    else:
+                        groundings_subarr = filtered_groundings
+                    '''
+
+                    '''
+                    for fbi,i in enumerate(range(0, len(filtered_groundings), MAX_GROUNDINGS_TO_SAMPLE)):
+                        groundings_subarr = filtered_groundings[i:i+MAX_GROUNDINGS_TO_SAMPLE]
+                        if len(groundings_subarr) < MIN_GROUNDINGS_NEEDED_FOR_GENERATION:
+                            max_len = max(MAX_GROUNDINGS_TO_SAMPLE, len(filtered_groundings))
+                            groundings_subarr = filtered_groundings[-max_len:]
+                    '''
+                    groundings_subarr = filtered_groundings    
+                    chunks_reduced = [(gobj['company_code'], gobj['company_name'], gobj['chunk_index']) for gobj in groundings_subarr]
+                    chunks_used = list(set(chunks_reduced))
+                    chunks_used = [{ 'company_code': cobj[0], 'company_name': cobj[1], 'chunk_index': cobj[2]} for cobj in chunks_used]
+                    #groundings_str = "[" + ",\n".join("{'text':" + f"{item['text']}" + ", 'company_name':" + f"{item['company_name']}" + "}" for item in groundings_subarr) + "]"
+                    #print('groundings subarr', groundings_subarr)
+                    groundings_str = json.dumps(
+                        [{"text": item["text"], "company_name": item["company_name"]} for item in groundings_subarr],
+                        indent=2
+                    )
                     print(f'\nRunning query  generation for entity: ', entity)
                     query_strs = self.__generate_queries_in_single_prompt(groundings_str, metadata, entity)
                     total_q += len(query_strs)
-                    all_resp[entity].extend([{'query': query_str, 'qstn_hop_span': 'single_doc', 'groundings': groundings_subarr, 'chunks_used': chunks_used, 'intended_qstn_type': [self.qstn_type] } for query_str in query_strs])
+                    all_resp[entity].extend([{'query': query_str, 'qstn_hop_span': 'multi_doc', 'docs_considered': relevant_companies, 'groundings': groundings_subarr, 'chunks_used': chunks_used, 'intended_qstn_type': [self.qstn_type] } for query_str in query_strs])
                     print(f'No of queries formed using entity {entity}: ', len(all_resp[entity]))
                     #sleep(60)
+                    '''
                     if len(all_resp[entity]) >= no_of_qstns:
                         break
+                    '''
                 attempts += 1
                         
             if all_resp != {}:
@@ -246,7 +304,7 @@ if __name__ == "__main__":
     parser.add_argument('--no_of_qstns', type = int, default = 5, required = False)
     parser.add_argument('--filename', type = str, default = '10-K_NVDA_20240128', required = False)
     parser.add_argument('--no_of_entities', type = int, default = 20, required = False)
-    parser.add_argument('--query_type', type = str, default = 'INF', required = False)
+    parser.add_argument('--query_type', type = str, default = 'summarization', required = False)
 
     args = parser.parse_args()
 
