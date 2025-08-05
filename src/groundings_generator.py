@@ -14,10 +14,9 @@ from groq import AsyncGroq
 
 # custom imports
 from utils.string_utils import extract_json_array_by_key, is_valid_sentence, extract_json_text_by_key, extract_json_object_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
 from src.prompts.grounding_generation.grounding_prompts import GROUNDING_INSTRUCTION_PROMPT, GROUNDING_EVALUATION_PROMPT, GROUNDING_REFINEMENT_PROMPT
 from src.consts.company_consts import COMPANY_DICT
-from src.consts.consts import MODELS, HF_CACHE_DIR, IGNORE_ENTITIES, NO_OF_TRIALS
+from src.consts.consts import MODELS, NO_OF_TRIALS
 
 class GroundingsGenerator:
 

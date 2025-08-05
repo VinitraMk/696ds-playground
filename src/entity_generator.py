@@ -1,138 +1,28 @@
-import torch
 import os
 import sys
 import json
-from time import time
-from vllm import LLM
+from time import time, sleep
 import argparse
-import multiprocessing
-from transformers import AutoModelForCausalLM, BitsAndBytesConfig
-from together import Together
 import matplotlib.pyplot as plt
-from groq import AsyncGroq
+from typing import List, Any
 
 #custom imports
 from utils.string_utils import extract_json_array_by_key, is_valid_sentence, extract_json_object_array_by_keys, extract_json_text_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks, get_tokenizer, execute_llama_task_api, execute_groq_task_api
-from src.prompts.entity_generation.entity_prompt import ENTITY_INSTRUCTION_PROMPT
-from consts.company_consts import COMPANY_DICT
-import consts.consts
+from src.prompts.entity_generation.entity_prompt import ENTITY_INSTRUCTION_PROMPT, ENTITY_SYSTEM_PROMPT, ENTITY_JSON_SCHEMA
+from src.consts.company_consts import COMPANY_DICT
+from src.base.generator import Generator
 
-class EntityGen:
+class EntityGenerator(Generator):
 
-    def __init__(self, filename, model_index = 0, prompt_batch_size = 3):
-        self.filename = filename
-        self.model_index = model_index
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.prompt_batch_size = prompt_batch_size
+    def __init__(self, model_index: int = 11, prompt_batch_size: int = 1):
+        super().__init__(model_index, prompt_batch_size)
         
-        print(f'Device enabled: {self.device}')
 
-        with open("./config.json", "r") as fp:
-            cfg = json.load(fp)
-
-        # Load the model using vLLM
-        self.model_name = MODELS[self.model_index]
-        print('Model used: ', self.model_name)
-        self.tokenizer = get_tokenizer(model_name = self.model_name)
-
-        if "Qwen2.5" in self.model_name:
-            self.llm = LLM(model=f"./models/{self.model_name}",
-                quantization = "gptq_marlin",
-                download_dir = HF_CACHE_DIR,
-                max_model_len = 2048 * 4,
-                gpu_memory_utilization = 0.95,
-                tensor_parallel_size=torch.cuda.device_count())
-            self.model_folder = "qwq"
-        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
-            model_path = "/datasets/ai/llama3/hub/models--meta-llama--Llama-3.3-70B-Instruct/snapshots/6f6073b423013f6a7d4d9f39144961bfbfbc386b"
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype="float16",
-                bnb_4bit_quant_type="nf4", 
-                bnb_4bit_use_double_quant=True,  
-                llm_int8_enable_fp32_cpu_offload=True
-            )
-
-            self.llm = AutoModelForCausalLM.from_pretrained(
-                model_path,
-                quantization_config=bnb_config,  
-                device_map="sequential",  
-                offload_folder="/tmp/offload", 
-                local_files_only=True
-            )
-            self.model_folder = "llama"
-            self.tokenizer = get_tokenizer(self.model_name)
-            #tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
-        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            self.llm = Together(api_key = cfg["togetherai_api_key"])
-            self.model_folder = "llama"
-        elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
-            self.llm = AsyncGroq(api_key = cfg["groq_api_key"])
-            self.model_folder = "llama"
-        else:
-            print('Invalid model name passed!')
-            SystemExit()
-
-
-    def __extract_and_clean_factoids(self, text):
-        #factoid_list = extract_json_object_array_by_keys(text, ["factoid", "citation"])
-        factoid_list = extract_json_array_by_key(text, "factoids")
-        if (factoid_list) and (len(factoid_list) > 0):
-        #print('factoid list', factoid_list)
-            clean_factoids_citations = [s for s in factoid_list if is_valid_sentence(s)]
-        else:
-            clean_factoids_citations = []
-        return clean_factoids_citations
-
-    def __get_output_from_llm(self, instruction_prompts, system_prompt, llm_config = None):
-        summary = ""
-        if self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
-            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompt[0], system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
-            outputs = execute_llama_LLM_task(self.llm, prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
-            summary = outputs[0]
-            if "Input for your task" in summary:
-                ti = summary.index("Input for your task")
-                summary = summary[ti:]
-            summary = [summary]
-        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            summary = execute_llama_task_api(self.llm, instruction_prompts[0], system_prompt)
-            print('generated response: ', summary)
-            summary = [summary]
-        elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
-            json_schema = {
-                "type": "json_object",
-                "name": "entity_extraction",
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "entities": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "required": ["entities"],
-                    "additionalProperties": False
-                }
-            }
-            summary = execute_groq_task_api(self.llm, json_schema, instruction_prompts, system_prompt)
-            print('generated response: ', summary[0])
-        else:
-            prompt_tokens = [get_prompt_token(instruction_prompt[0], system_prompt, self.tokenizer)]
-            outputs = execute_LLM_tasks(self.llm, prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
-            summary = outputs[0].outputs[0].text.strip()
-            print(f'generated response: ', summary)
-            summary = [summary]
-
-        return summary
-
-    def __generate_entities_from_chunks(self, chunks):
+    def __generate_entities_from_chunks(self, chunks: List[Any]):
 
         entity_instruction_prompt = ENTITY_INSTRUCTION_PROMPT
-        
-        entity_system_prompt = "You are a helpful assistant, that given a chunk of text, generates entites addressed in the text."
+        entity_json_schema = ENTITY_JSON_SCHEMA
+        entity_system_prompt = ENTITY_SYSTEM_PROMPT
         chunk_entities = []
         entity_info = {}
         entity_chunk_info = {}
@@ -142,13 +32,13 @@ class EntityGen:
             batch_chunks = chunks[ci:ci+self.prompt_batch_size]
             entity_prompt_texts = [entity_instruction_prompt + f"\nChunk: {chunk}" for chunk in batch_chunks]
             #entity_prompt_text = 
-            esummaries = self.__get_output_from_llm(entity_prompt_texts, entity_system_prompt)
+            esummaries, _ = self.get_output_from_llm(entity_prompt_texts, entity_system_prompt, entity_json_schema)
             ci_indices = list(range(ci, min(ci+self.prompt_batch_size, chunk_count)))
             for cbii, cbi in enumerate(ci_indices):
                 print('esummaries: ', esummaries, cbii)
                 ejson = extract_json_array_by_key(esummaries[cbii], "entities")
                 if ejson != None and len(ejson) > 0:
-                    ejson = list(set([et.title() for et in ejson]))
+                    ejson = list(set([et.upper() for et in ejson]))
                     print(f'Entities from chunk {cbi}:', ejson)
                     for en in ejson:
                         if en in entity_info:
@@ -173,16 +63,23 @@ class EntityGen:
     
     def generate_entities(self):
 
+        raw_chunks_fp = 'data/chunked_data/chunks'
+        chunk_store_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{self.filecode}'
+        plot_stats_fp = f'figures/data/queries/{self.model_folder}/{self.filecode}'
+        os.makedirs(plot_stats_fp, exist_ok = True)
+        os.makedirs(chunk_store_fp, exist_ok = True)
+
         chunk_fn = f'{self.filename}_chunked'
         chunk_fp = f'data/chunked_data/chunks/{chunk_fn}.json'
         with open(chunk_fp, 'r') as fp:
             self.all_chunks = json.load(fp)["chunks"]
-        self.chunks = [{ 'chunk_index': ci, 'text': self.all_chunks[ci] } for ci in range(len(self.scored_chunks))]
-        print('Filtered chunks: ', len(self.chunks))
 
-        file_chunkstore_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{self.filename}_chunk_store.json'
+        self.chunks = [{ 'chunk_index': ci, 'text': self.all_chunks[ci] } for ci in range(len(self.all_chunks))]
+        print('No of chunks: ', len(self.chunks))
+
+        file_chunkstore_fp = os.path.join(chunk_store_fp, f'{self.filename}_chunk_store.json')
         if os.path.exists(file_chunkstore_fp):
-            with open(file_chunkstore_fp, 'r+') as fp:
+            with open(file_chunkstore_fp, 'r') as fp:
                 chunks_obj = json.load(fp)
         else:
             chunks_obj = { "chunks": [] }
@@ -192,11 +89,11 @@ class EntityGen:
 
         entity_count_values = [eiob['count'] for eiob in list(entity_info.values())]
         entity_values = list(entity_info.keys())
-        plt.bar(entity_values, entity_count_values)
-        plt.savefig(f'./figures/data/queries/{self.model_folder}/{self.filename}_entity_dist.png')
+        #plt.bar(entity_values, entity_count_values)
+        #plt.savefig(f'{plot_stats_fp}/{self.filename}_entity_dist.png')
 
         # save entities info
-        with open(f'./data/chunked_data/global_chunk_store/{self.model_folder}/{self.filename}_entities_info.json', 'w') as fp:
+        with open(f'{chunk_store_fp}/{self.filename}_entities_info.json', 'w') as fp:
             json.dump(entity_info, fp)
 
         #print(chunk_factoids)
@@ -224,20 +121,19 @@ if __name__ == "__main__":
     old_stdout = sys.stdout
     sys.stdout = log_file
 
-    multiprocessing.set_start_method("spawn")  # Fixes CUDA issue with multiprocessing
-    torch.cuda.init()
-
+    
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_index', type=int, default = 6, required = False)
-    parser.add_argument('--filename', type=str, default = '10-K_NVDA_20240128', required = False)
+    parser.add_argument('--model_index', type=int, default = 11, required = False)
+    parser.add_argument('--filecode', type=str, default = 'NVDA', required = False)
     parser.add_argument('--prompt_batch_size', type = int, default = 1, required = False)
 
     args = parser.parse_args()
 
-    entity_gen = EntityGen(filename = args.filename, model_index = args.model_index, prompt_batch_size = args.prompt_batch_size)
+    filename = COMPANY_DICT[args.filecode]['filename']
+    entity_gen = EntityGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size)
+    entity_gen.set_filename(filename, args.filecode)
     entity_gen.generate_entities()
     
-
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout
     log_file.close()

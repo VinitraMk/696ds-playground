@@ -1944,3 +1944,6 @@ COMPANY_DICT =  {
         "company_name": ""
     }
 }
+
+#COMPANIES_POOL = ['NVDA', 'INTC', 'AMD', 'TSLA', 'F', 'GM']
+COMPANIES_POOL = ['NVDA', 'INTC', 'AMD']

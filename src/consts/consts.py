@@ -28,15 +28,15 @@ FILENAMES = [
     '10-K_TSLA_20231231'
 ]
 
-IGNORE_ENTITIES = ['Table of Contents', 'SEC', '10-K filings', 'SEC 10-K filings', 'SEC 10-K', 'SEC (Securities and Exchange Commission)', 'Notes', 'Item 1A', 'Part IV, Item 15', 'Item 601(b)(32)(ii)', 'Item 15', 'Item']
+IGNORE_ENTITIES = ['TABLE OF CONTENTS', 'SEC', '10-K FILINGS', 'SEC 10-K FILINGS', 'SEC 10-K', 'SEC (Securities and Exchange Commission)', 'NOTES', 'ITEM 1A', 'PART IV', 'ITEM 15', 'ITEM 601(B)(32)(II)', 'ITEM 15', 'ITEM', 'CONSOLIDATED FINANCIAL STATEMENTS', 'FORM 10-K', 'ANNUAL REPORT', 'SECURITIES AND EXCHANGE COMMISSION']
 MAX_GROUNDINGS_TO_SAMPLE = 50
 MIN_GROUNDINGS_NEEDED_FOR_GENERATION = 10
 
-'''
 QUERY_TYPE_MAP = {
-    'Inference': 'INF',
-    'Temporal': 'TMP',
-    'Comparison': 'CMP',
-    'None': 'None'
+    'tmp': 'temporal_analysis',
+    'evtint': 'event_interaction_analysis',
+    'etint': 'entity_interaction_analysis',
+    'num': 'numerical_analysis',
+    'summ': 'summarization',
+    'none': 'none'
 }
-'''

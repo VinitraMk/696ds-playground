@@ -1,78 +1,26 @@
 from time import time
 import sys
 import argparse
-import torch
 import json
-import re
 import os
-import gc
 import matplotlib.pyplot as plt
+from typing import List
 
 #custom imports
-from src.consts.company_consts import COMPANY_DICT
-from src.consts.consts import HF_CACHE_DIR, MODELS
-
-
-os.environ['HF_HOME'] = HF_CACHE_DIR
+from src.consts.company_consts import COMPANY_DICT, COMPANIES_POOL
+from src.consts.consts import MODELS
 
 class EntityGrouper:
 
-    def __init__(self, model_index = 6):
+    def __init__(self, model_index: int = 11):
         self.model_name = MODELS[model_index]
-        with open("./config.json", "r") as fp:
-            cfg = json.load(fp)
-
-        if "QwQ" in self.model_name:
-            self.llm = LLM(model=f"./models/{self.model_name}",
-                    quantization = "awq",
-                    download_dir = HF_CACHE_DIR,
-                    max_model_len = 2048 * 4,
-                    #gpu_memory_utilization=0.95,
-                    tensor_parallel_size=torch.cuda.device_count())
-            self.model_folder = "qwq"
-        elif "Qwen2.5" in self.model_name:
-            self.llm = LLM(model=f"./models/{self.model_name}",
-                quantization = "gptq_marlin",
-                download_dir = HF_CACHE_DIR,
-                max_model_len = 2048 * 4,
-                gpu_memory_utilization=0.95,
-                tensor_parallel_size=torch.cuda.device_count())
-            self.model_folder = "qwq"
-        elif "gemini" in self.model_name:
-            self.llm = genai.Client(
-                api_key = cfg["google_api_keys"]["vinitramk4"]
-            )
-            self.model_folder = "gemini"
-        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
-            model_path = "/datasets/ai/llama3/hub/models--meta-llama--Llama-3.3-70B-Instruct/snapshots/6f6073b423013f6a7d4d9f39144961bfbfbc386b"
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype="float16",
-                bnb_4bit_quant_type="nf4", 
-                bnb_4bit_use_double_quant=True,  
-                llm_int8_enable_fp32_cpu_offload=True
-            )
-
-            self.llm = AutoModelForCausalLM.from_pretrained(
-                model_path,
-                quantization_config=bnb_config,  
-                device_map="sequential",  
-                offload_folder="/tmp/offload", 
-                local_files_only=True
-            )
-            self.model_folder = "llama"
-            self.tokenizer = get_tokenizer(self.model_name)
-        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            #self.llm = Together(api_key = cfg["togetherai_api_key"])
-            self.model_folder = "llama"
-        elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
-            #self.llm = AsyncGroq(api_key = cfg["groq_api_key"])
+        if "llama" in self.model_name.lower():
             self.model_folder = "llama"
         else:
-            raise SystemExit('Invalid model index passed!')
+            print('Invalid model index passed!')
+            SystemExit()
 
-
-    def identify_common_entities(self, companies_to_anchor):
+    def identify_common_entities(self, companies_to_anchor: List[str]):
         chunk_store_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}'
         
         entities_intersection = []
@@ -133,53 +81,83 @@ class EntityGrouper:
         with open('./sampled_common_entities.json', 'w') as fp:
             json.dump({'docs_considered': companies_to_anchor, 'common_entities': optimal_entities}, fp)
 
-    def get_entity_doc_histogram(self, companies_pool):
+    def get_entity_doc_mapping(self, companies_pool: List[str]):
         all_comp_entities = {}
-        data_folder_path = 'data/chunked_data/global_chunk_store/llama'
+        all_comp_entity_keys = {}
+        data_folder_path = f'data/chunked_data/global_chunk_store/{self.model_folder}'
+        doc_buckets = list(range(2, min(len(companies_pool), 10)+1))
+        print('Document buckets to be considered: ', doc_buckets)
+
         all_entities = []
         entities_to_doc = {}
         for cp in companies_pool:
-            data_path = os.path.join(data_folder_path, f'{COMPANY_DICT[cp]["filename"]}_entities_info.json')
+            data_path = os.path.join(data_folder_path, f'{cp}/{COMPANY_DICT[cp]["filename"]}_entities_info.json')
             with open(data_path, 'r') as fp:
                 entities_info = json.load(fp)
-            all_comp_entities[cp] = list(entities_info.keys())
+            #all_comp_entities[cp] = list(entities_info.keys())
+            #all_comp_entities = entities_info
+            all_comp_entity_keys[cp] = list(entities_info.keys())
             all_entities.extend(list(entities_info.keys()))
-        
+
+        all_entities = list(set(all_entities))
         for ek in all_entities:
-            entities_to_doc[ek] = 0
+            entities_to_doc[ek] = { 'count': 0, 'docs': [] }
             for cp in companies_pool:
-                if ek in all_comp_entities[cp]:
-                    entities_to_doc[ek] += 1
+                if ek in all_comp_entity_keys[cp]:
+                    data_path = os.path.join(data_folder_path, f'{cp}/{COMPANY_DICT[cp]["filename"]}_entities_info.json')
+                    with open(data_path, 'r') as fp:
+                        entities_info = json.load(fp)
+
+                    entities_to_doc[ek]['count'] += 1
+                    entities_to_doc[ek]['docs'].append({
+                        'doc': cp,
+                        'chunk_count': entities_info[ek]['count'],
+                        'chunk_indices': entities_info[ek]['chunk_indices']
+                    })
+                    
 
         doc_hist = [0] * len(companies_pool)
-        entity_doc_vals = list(entities_to_doc.values())
+        entity_doc_vals = list(map(lambda x: x['count'], list(entities_to_doc.values())))
         for c in range(len(companies_pool)):
             co = entity_doc_vals.count(c+1)
             doc_hist[c] = co
-        plt.bar(list(range(2, len(companies_pool) + 1)), doc_hist[1:])
-        print(doc_hist)
+
+        plt.bar(doc_buckets, doc_hist[1:])
+        plt.xticks(doc_buckets)
+        print('Document bar plot values: ', doc_hist)
         plt.xlabel('No of doc buckets')
         plt.ylabel('No of entities in doc buckets')
         plt.title('Entities to doc count')
-        plt.savefig('entities_to_doc_hist.png')
-        with open('all_comp_entity_stats.json', 'w') as fp:
-            json.dump(entities_to_doc, fp)
+        plt.savefig('data/plots/entities_to_doc_hist.png')
 
-    def group_entities(self, no_of_entities = 5, no_of_companies = 3):
-        companies_pool = ['NVDA', 'AMD', 'INTC', 'TSLA', 'F', 'GM']
-        companies_to_anchor = ['NVDA', 'AMD', 'INTC']
+        doc_to_entities = {}
+        
+        for ek in all_entities:
+            for bucket in doc_buckets:
+                if bucket not in doc_to_entities:
+                    doc_to_entities[bucket] = {}
+                if ek in entities_to_doc and entities_to_doc[ek]['count'] == bucket:
+                    print('entities: ', ek, entities_to_doc[ek])
+                    optimal_bucket_entities = [dobj for dobj in entities_to_doc[ek]['docs'] if dobj['chunk_count'] >= 5 and dobj['chunk_count'] <= 15]
+                    found = False
+                    if len(optimal_bucket_entities) == bucket:
+                        doc_to_entities[bucket][ek] = optimal_bucket_entities
+                        found = True
+                    if found:
+                        break
+                    
+
+        with open(f'data/chunked_data/global_chunk_store/{self.model_folder}/all_doc_entity_stats.json', 'w') as fp:
+            json.dump(doc_to_entities, fp)
+
+    def group_entities(self):
+        #companies_pool = ['NVDA', 'AMD', 'INTC', 'TSLA', 'F', 'GM']
+        #companies_to_anchor = ['NVDA', 'AMD', 'INTC']
+        companies_pool = COMPANIES_POOL
         #self.identify_common_entities(companies_to_anchor)
-        self.get_entity_doc_histogram(companies_pool)
+        self.get_entity_doc_mapping(companies_pool)
         
         
-    def destroy(self):
-        #del self.llm
-        gc.collect()
-        torch.cuda.empty_cache()
-        os._exit(0)
-
-
-
 if __name__ == "__main__":
     st = time()
 
@@ -188,20 +166,14 @@ if __name__ == "__main__":
     old_stdout = sys.stdout
     sys.stdout = log_file
 
-    #multiprocessing.set_start_method("spawn")  # Fixes CUDA issue with multiprocessing
-    #torch.cuda.init()
-
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_index', type = int, default = 6, required = False)
-    parser.add_argument('--no_of_entities', type = int, default = 5, required = False)
-    parser.add_argument('--no_of_companies', type = int, default = 3, required = False)
+    parser.add_argument('--model_index', type = int, default = 11, required = False)
 
     args = parser.parse_args()
 
     entity_grouper = EntityGrouper(model_index = args.model_index)
-    entity_grouper.group_entities(no_of_entities = args.no_of_entities, no_of_companies = args.no_of_companies)
+    entity_grouper.group_entities()
 
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout
     log_file.close()
-    entity_grouper.destroy()

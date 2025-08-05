@@ -70,7 +70,7 @@ def execute_llama_task_api(llm_model, prompt, system_prompt, temperature = 0.6):
     )
     return response.choices[0].message.content
 
-def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, temperature = 0.6):
+def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, temperature = 0.6, max_completion_tokens = 8192):
 
     delta_responses = []
     print('length of prompts: ', len(prompts))
@@ -93,7 +93,7 @@ def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, te
                         model="llama-3.3-70b-versatile",
                         messages=messages,
                         temperature=temperature,
-                        max_completion_tokens=8192,
+                        max_completion_tokens=max_completion_tokens,
                         stream=False,
                         response_format=response_format,
                         stop=None,
