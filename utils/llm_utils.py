@@ -76,9 +76,9 @@ def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, te
     print('length of prompts: ', len(prompts))
 
     async def process_messages(prompts, max_retries = 3):
-        results = []
+        results = [{"response": "", "prompt_tokens": 0, "output_tokens": 0}] * len(prompts)
 
-        for prompt in prompts:
+        for pi, prompt in enumerate(prompts):
             if prompt != None and prompt != "":
                 attempt = 0
 
@@ -94,12 +94,13 @@ def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, te
                             model="llama-3.3-70b-versatile",
                             messages=messages,
                             temperature=temperature,
+                            top_p = 0.9,
                             max_completion_tokens=max_completion_tokens,
                             stream=False,
                             response_format=response_format,
                             stop=None,
                         )
-                        results.append({'response': completion.choices[0].message.content, 'prompt_tokens': completion.usage.prompt_tokens, 'output_tokens': completion.usage.completion_tokens })
+                        results[pi] = {'response': completion.choices[0].message.content, 'prompt_tokens': completion.usage.prompt_tokens, 'output_tokens': completion.usage.completion_tokens }
                         success = True
                         break
 
@@ -115,7 +116,7 @@ def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, te
                 if not success:
                     SystemExit("Groq api responded with errors!")
             else:
-                results.append({ 'response': "", 'prompt_tokens': 0, 'output_tokens': 0 })
+                results[pi] = { 'response': "", 'prompt_tokens': 0, 'output_tokens': 0 }
         
         return results
 

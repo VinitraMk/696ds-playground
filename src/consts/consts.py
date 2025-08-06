@@ -40,3 +40,11 @@ QUERY_TYPE_MAP = {
     'summ': 'summarization',
     'none': 'none'
 }
+
+QUERY_INDEX = {
+    0: 'temporal_analysis',
+    1: 'event_interaction_analysis',
+    2: 'entity_interaction_analysis',
+    3: 'numerical_analysis',
+    4: 'summarization'
+}

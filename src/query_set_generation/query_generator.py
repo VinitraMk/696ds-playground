@@ -16,7 +16,7 @@ from src.prompts.query_set_generation.entity_interaction_analysis_question_promp
 from src.prompts.query_set_generation.event_interaction_analysis_question_prompt import EVTINT_QSTN_INSTRUCTION_PROMPT
 from src.prompts.query_set_generation.numerical_analysis_question_prompt import NUM_QSTN_INSTRUCTION_PROMPT
 from src.consts.company_consts import COMPANY_DICT
-from src.consts.consts import MODELS, MAX_GROUNDINGS_TO_SAMPLE, MIN_GROUNDINGS_NEEDED_FOR_GENERATION
+from src.consts.consts import MODELS, MAX_GROUNDINGS_TO_SAMPLE, MIN_GROUNDINGS_NEEDED_FOR_GENERATION, QUERY_INDEX
 from src.base.generator import Generator
 
 QUERY_JSON_SCHEMA = {
@@ -47,30 +47,49 @@ class QueryGenerator(Generator):
         self.query_hop_span = query_hop_span
 
     def __generate_queries_in_single_prompt(self, groundings_doc_text, metadata, entity):
-        
-        qstn_instruction_prompt = SUMM_QSTN_INSTRUCTION_PROMPT
-        if self.query_type == 'entity_interaction_analysis':
-            qstn_instruction_prompt = ETINT_QSTN_INSTRUCTION_PROMPT
-        elif self.query_type == 'temporal_analysis':
-            qstn_instruction_prompt = TMP_QSTN_INSTRUCTION_PROMPT
-        elif self.query_type == 'event_interaction_analysis':
-            qstn_instruction_prompt = EVTINT_QSTN_INSTRUCTION_PROMPT
-        elif self.query_type == 'numerical_analysis':
-            qstn_instruction_prompt = NUM_QSTN_INSTRUCTION_PROMPT
-        else:
-            qstn_instruction_prompt = SUMM_QSTN_INSTRUCTION_PROMPT
 
-        qstn_instruction_prompt = qstn_instruction_prompt + f"\nMetadata: {metadata}\nGroundings: {groundings_doc_text}\nEntity: {entity}"
+        query_instruction_prompts = []
+        if self.query_type == 'all':
+            for qt in QUERY_INDEX.keys():
+                if QUERY_INDEX[qt] == 'entity_interaction_analysis':
+                    qstn_instruction_prompt = ETINT_QSTN_INSTRUCTION_PROMPT
+                elif QUERY_INDEX[qt] == 'temporal_analysis':
+                    qstn_instruction_prompt = TMP_QSTN_INSTRUCTION_PROMPT
+                elif QUERY_INDEX[qt] == 'event_interaction_analysis':
+                    qstn_instruction_prompt = EVTINT_QSTN_INSTRUCTION_PROMPT
+                elif QUERY_INDEX[qt] == 'numerical_analysis':
+                    qstn_instruction_prompt = NUM_QSTN_INSTRUCTION_PROMPT
+                else:
+                    qstn_instruction_prompt = SUMM_QSTN_INSTRUCTION_PROMPT
+
+                qstn_instruction_prompt = qstn_instruction_prompt + f"\nMetadata: {metadata}\nGroundings: {groundings_doc_text}\nEntity: {entity}"
+                query_instruction_prompts.append(qstn_instruction_prompt)
+        else:
+            if self.query_type == 'entity_interaction_analysis':
+                qstn_instruction_prompt = ETINT_QSTN_INSTRUCTION_PROMPT
+            elif self.query_type == 'temporal_analysis':
+                qstn_instruction_prompt = TMP_QSTN_INSTRUCTION_PROMPT
+            elif self.query_type == 'event_interaction_analysis':
+                qstn_instruction_prompt = EVTINT_QSTN_INSTRUCTION_PROMPT
+            elif self.query_type == 'numerical_analysis':
+                qstn_instruction_prompt = NUM_QSTN_INSTRUCTION_PROMPT
+            else:
+                qstn_instruction_prompt = SUMM_QSTN_INSTRUCTION_PROMPT
+            qstn_instruction_prompt = qstn_instruction_prompt + f"\nMetadata: {metadata}\nGroundings: {groundings_doc_text}\nEntity: {entity}"
+            query_instruction_prompts = [qstn_instruction_prompt]
+
         qstn_system_prompt = QUERY_SYSTEM_PROMPT
         query_strs = []
         if self.model_name == "meta-llama/llama-3.3-70b-versatile":
             query_json_schema = QUERY_JSON_SCHEMA
-            qsummary, _ = self.get_output_from_llm([qstn_instruction_prompt], qstn_system_prompt, query_json_schema)
+            qsummaries, _ = self.get_output_from_llm(query_instruction_prompts, qstn_system_prompt, query_json_schema)
         else:
-            qsummary, _ = self.get_output_from_llm([qstn_instruction_prompt], qstn_system_prompt, None)
-        qjson = extract_json_array_by_key(qsummary[0], "queries")
-        if qjson != None and len(qjson) > 0:
-            query_strs = [qj for qj in qjson if is_valid_sentence(qj, 150)]
+            qsummaries, _ = self.get_output_from_llm(query_instruction_prompts, qstn_system_prompt, None)
+
+        for qsummary in qsummaries:
+            qjson = extract_json_array_by_key(qsummary, "queries")
+            if qjson != None and len(qjson) > 0:
+                query_strs.extend(qjson)
         
         return query_strs
         
@@ -99,7 +118,7 @@ class QueryGenerator(Generator):
         entity: str, docs_considered = List[str],
         no_of_qstns: int = 1):
 
-        while len(all_resp[entity]) < no_of_qstns:
+        while len(all_resp[entity]) < (no_of_qstns * 5):
             '''
             for fbi,i in enumerate(range(0, len(filtered_groundings), MAX_GROUNDINGS_TO_SAMPLE)):
                 groundings_subarr = filtered_groundings[i:i+MAX_GROUNDINGS_TO_SAMPLE]
@@ -120,13 +139,9 @@ class QueryGenerator(Generator):
             print(f'\nRunning query  generation for entity: ', entity)
             metadata = f'Input source: SEC 10-K Filings | Companies addressed in the groundings: {",".join(list(map(lambda x: COMPANY_DICT[x]["company_name"], docs_considered)))}'
             query_strs = self.__generate_queries_in_single_prompt(groundings_str, metadata, entity)
-            all_resp[entity].extend([{'query': query_str, 'query_hop_span': self.query_hop_span, 'docs_considered': docs_considered, 'groundings': groundings_subarr, 'chunks_used': chunks_used, 'intended_query_type': [self.query_type] } for query_str in query_strs])
+            all_resp[entity].extend([{'query': query_str, 'query_hop_span': self.query_hop_span, 'docs_considered': docs_considered, 'groundings': groundings_subarr, 'chunks_used': chunks_used, 'intended_query_type': [QUERY_INDEX[qi]] } for qi, query_str in enumerate(query_strs)])
             print(f'No of queries formed using entity {entity}: ', len(all_resp[entity]))
-            #sleep(60)
-            '''
-            if len(all_resp[entity]) >= no_of_qstns:
-                break
-            '''
+            
         return all_resp
 
     def generate_query(self, no_of_qstns:int = 5, no_of_entities:int = 20):
@@ -172,8 +187,6 @@ class QueryGenerator(Generator):
 
             print('length of the entire groundings array: ', len(all_groundings))
 
-            
-
             all_resp = {}
             print('\nStarting query generation for batch of groundings\n')
             total_q = 0
@@ -198,10 +211,10 @@ class QueryGenerator(Generator):
                     doc_groups = sampled_doc_groups_info[entity]
                     filtered_groundings = []
                     print('doc groups', doc_groups)
-                    print('\nall groundings: ', len(all_groundings), all_groundings)
+                    #print('\nall groundings: ', len(all_groundings), all_groundings)
                     for dcg in doc_groups:
                         filtered_groundings.extend([gobj for gobj in all_groundings if gobj['entity'] == entity and gobj['doc_code'] in dcg])
-                        print('filtered groundings: ', filtered_groundings)
+                        #print('filtered groundings: ', filtered_groundings)
                         print(f'No of groundings under entity {entity}: ', len(filtered_groundings))
                         if len(filtered_groundings) > 0:
                             all_resp = self.__get_questions(filtered_groundings = filtered_groundings, all_resp = all_resp,
@@ -238,7 +251,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    query_gen = QueryGenerator(model_index = args.model_index, query_type = args.query_type)
+    query_gen = QueryGenerator(model_index = args.model_index, query_type = args.query_type, query_hop_span = 'single_doc')
     print(f'\n\nGenerating queries for file: {args.filecode}')
     query_gen.set_filename(args.filecode)
     query_gen.generate_query(no_of_qstns = args.no_of_qstns, no_of_entities = args.no_of_entities)

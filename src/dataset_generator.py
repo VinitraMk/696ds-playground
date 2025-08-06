@@ -32,7 +32,7 @@ if __name__ == "__main__":
     parser.add_argument('--no_of_entities', type = int, default = 3, required = False)
     parser.add_argument('--prompt_batch_size', type = int, default = 1, required = False)
     parser.add_argument('--query_hop_span', type = str, default = 'multi_doc', required = False)
-    parser.add_argument('--query_type', type = str, default = 'numerical_analysis', required = False)
+    parser.add_argument('--query_type', type = str, default = 'all', required = False)
     parser.add_argument('--step', type = str, default = 'query_gen', required = False)
     parser.add_argument('--bucket_size', type = int, default = 2, required = False)
     parser.add_argument('--skip_entity_sampling', type = bool, default = False, required = False)
