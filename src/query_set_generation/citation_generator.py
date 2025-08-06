@@ -61,9 +61,9 @@ class CitationGenerator(Generator):
             with open(iquery_store_fp, 'r') as fp:
                 query_store = json.load(fp)
             query_arr = query_store["queries"]
-            print('total no of queries formed: ', len(query_arr))
+            print('total no of entities formed: ', len(query_arr))
 
-            print('\nStarting answer generation for batch of questions\n')
+            print('\nStarting citations generation for batch of questions\n')
             sampled_entities = list(query_arr.keys())
             #sampled_entities = ["Ai", "Intangible Assets", "Data Center"]
             print('\nSampled entities: ', sampled_entities)
@@ -84,6 +84,9 @@ class CitationGenerator(Generator):
 
                 for qi, query_obj in enumerate(filtered_queries):
                     chunks_used = query_obj["chunks_used"]
+                    grounded_chunks = set([])
+                    for cobj in chunks_used:
+                        grounded_chunks.add((cobj['doc_code'], cobj['chunk_index']))
 
                     all_citations = []
                     cited_chunks = set([])
@@ -111,8 +114,12 @@ class CitationGenerator(Generator):
                     for cobj in all_citations:
                         cited_chunks.add((cobj["doc_code"], cobj["chunk_index"]))
                         cited_docs.add(cobj["doc_code"])
-                    cited_docs = list(cited_docs)
-                    cited_chunks = list(cited_chunks)
+                    if cited_chunks.issubset(grounded_chunks):
+                        cited_docs = list(cited_docs)
+                        cited_chunks = list(cited_chunks)
+                    else:
+                        cited_docs = []
+                        cited_chunks = []
                     cited_chunks = [{"doc_code": cobj[0], "chunk_index": cobj[1]} for cobj in cited_chunks]
                     if len(cited_chunks) < 5:
                         less_hop_qstns.append({ 'entity': entity, 'query': query_obj['query'], 'answer': query_obj['answer'], 'docs_considered': cited_docs, 'groundings': query_obj['groundings'], 'citations': all_citations, 'chunks_used': cited_chunks })
@@ -131,7 +138,7 @@ class CitationGenerator(Generator):
 
             with open(subpar_query_store_fp, 'w') as fp:
                 json.dump({ "queries": less_hop_qstns}, fp)
-
+            self.reset_script_status()
             print('\nNo of questions with less than 5 hops: ', len(less_hop_qstns))
             print('\nNo of questions before citation generation: ', total_q_bfr)
             print('No of questions after citation generation: ', total_q_after)
@@ -155,7 +162,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     cit_gen = CitationGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size, query_hop_span = 'single_doc')
-    print(f'\n\nGenerating answers for filecode: {args.filecode}')
+    print(f'\n\nGenerating citations for filecode: {args.filecode}')
     cit_gen.set_filename(args.filecode)
     cit_gen.generate_citations(no_of_entities = args.no_of_entities)
 
