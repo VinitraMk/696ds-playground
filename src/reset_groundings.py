@@ -2,7 +2,7 @@ import json
 import os
 from src.consts.company_consts import COMPANY_DICT
 
-code = 'NVDA'
+code = 'INTC'
 chunk_store_data_path = f'data/chunked_data/global_chunk_store/llama/{code}'
 fname = COMPANY_DICT[code]['filename']
 chunk_store_fp = os.path.join(chunk_store_data_path, f'{fname}_chunk_store.json')

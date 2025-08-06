@@ -204,7 +204,7 @@ class GroundingsGenerator(Generator):
                     groundings = []
                     gop_avg = gbest_stats[ci]['output_tokens'] / len(gjson_arr_best)
                     for gc in gjson_arr_best:
-                        groundings.append({'doc_code': self.filecode, 'text': gc, 'entity': entity, 'average_output_tokens': gop_avg})
+                        groundings.append({'doc_code': self.filecode, 'chunk_index': ci, 'text': gc, 'entity': entity, 'average_output_tokens': gop_avg})
                     groundings_set[ci] = {
                         'groundings_score': TSMAX[ci],
                         'best_groundings': groundings,

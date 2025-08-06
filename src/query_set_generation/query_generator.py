@@ -1,277 +1,217 @@
 import os
 import torch
-from vllm import LLM
-import multiprocessing
 import numpy as np
 import json
 from time import time, sleep
 import sys
 import argparse
-import gc
 import random
-from google import genai
-from transformers import AutoModelForCausalLM, BitsAndBytesConfig
-from together import Together
-from groq import AsyncGroq
+from typing import List, Any, Dict
 
+# custom imports
 from utils.string_utils import is_valid_sentence, extract_json_text_by_key, extract_json_array_by_key
-from utils.llm_utils import get_prompt_token, execute_LLM_tasks, execute_gemini_LLM_task, execute_llama_LLM_task, get_tokenizer, execute_llama_task_api, execute_groq_task_api
 from src.prompts.query_set_generation.summarization_question_prompt import SUMM_QSTN_INSTRUCTION_PROMPT
 from src.prompts.query_set_generation.temporal_analysis_question_prompt import TMP_QSTN_INSTRUCTION_PROMPT
 from src.prompts.query_set_generation.entity_interaction_analysis_question_prompt import ETINT_QSTN_INSTRUCTION_PROMPT
 from src.prompts.query_set_generation.event_interaction_analysis_question_prompt import EVTINT_QSTN_INSTRUCTION_PROMPT
 from src.prompts.query_set_generation.numerical_analysis_question_prompt import NUM_QSTN_INSTRUCTION_PROMPT
 from src.consts.company_consts import COMPANY_DICT
-from src.consts.consts import MODELS, HF_CACHE_DIR, MAX_GROUNDINGS_TO_SAMPLE, MIN_GROUNDINGS_NEEDED_FOR_GENERATION
+from src.consts.consts import MODELS, MAX_GROUNDINGS_TO_SAMPLE, MIN_GROUNDINGS_NEEDED_FOR_GENERATION
+from src.base.generator import Generator
 
-class QueryGenerator:
+QUERY_JSON_SCHEMA = {
+    "type": "json_object",
+    "name": "query_generation",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "queries": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
+        "required": ["queries"],
+        "additionalProperties": False
+    }
+}
+QUERY_SYSTEM_PROMPT = "You are a helpful assistant, that given a list of groundings, generates meaningful and complex questions from it."
 
-    def __init__(self, model_index = 6, qstn_type = 'INF'):
-        #self.filename = filename
-        #self.company_name = COMPANY_DICT[filename.split('_')[1]]
-        self.device = torch.device("cuda")
-        self.model_name = MODELS[model_index]
-        self.qstn_type = qstn_type
+class QueryGenerator(Generator):
 
-        with open("./config.json", "r") as fp:
-            cfg = json.load(fp)
-
-        if "QwQ" in self.model_name:
-            self.llm = LLM(model=f"./models/{self.model_name}",
-                    quantization = "awq",
-                    download_dir = HF_CACHE_DIR,
-                    max_model_len = 2048 * 4,
-                    #gpu_memory_utilization=0.95,
-                    tensor_parallel_size=torch.cuda.device_count())
-            self.model_folder = "qwq"
-            self.tokenizer = get_tokenizer(self.model_name)
-        elif "Qwen2.5" in self.model_name:
-            self.llm = LLM(model=f"./models/{self.model_name}",
-                quantization = "gptq_marlin",
-                download_dir = HF_CACHE_DIR,
-                max_model_len = 2048 * 4,
-                gpu_memory_utilization=0.95,
-                tensor_parallel_size=torch.cuda.device_count())
-            self.model_folder = "qwq"
-            self.tokenizer = get_tokenizer(self.model_name)
-        elif "gemini" in self.model_name:
-            self.llm = genai.Client(
-                api_key = cfg["google_api_keys"]["vinitramk1"]
-            )
-            self.model_folder = "gemini"
-        elif self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
-            model_path = "/datasets/ai/llama3/hub/models--meta-llama--Llama-3.3-70B-Instruct/snapshots/6f6073b423013f6a7d4d9f39144961bfbfbc386b"
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype="float16",
-                bnb_4bit_quant_type="nf4", 
-                bnb_4bit_use_double_quant=True,  
-                llm_int8_enable_fp32_cpu_offload=True
-            )
-
-            self.llm = AutoModelForCausalLM.from_pretrained(
-                model_path,
-                quantization_config=bnb_config,  
-                device_map="sequential",
-                offload_folder="/tmp/offload", 
-                local_files_only=True
-            )
-            self.model_folder = "llama"
-            self.tokenizer = get_tokenizer(self.model_name)
-            #tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
-        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            self.llm = Together(api_key = cfg["togetherai_api_key"])
-            self.model_folder = "llama"
-        elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
-            self.llm = AsyncGroq(api_key = cfg["groq_api_key"])
-            self.model_folder = "llama"
-        else:
-            raise SystemExit('Invalid model index passed!')
-
-    def __get_output_from_llm(self, instruction_prompts, system_prompt, json_schema = None, llm_config = None):
-        summary = ""
-        if self.model_name == "meta-llama/Meta-Llama-3.3-70B-Instruct":
-            prompt_tokens = self.tokenizer([get_prompt_token(instruction_prompts, system_prompt, self.tokenizer)], return_tensors = "pt", padding = True, truncation = True).to(self.device)
-            outputs = execute_llama_LLM_task(self.llm, prompt_tokens, self.tokenizer, max_new_tokens=3000, temperature=0.6)
-            summary = outputs[0]
-            if "Input for your task" in summary:
-                ti = summary.index("Input for your task")
-                summary = [summary[ti:]]
-        elif self.model_name == "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free":
-            summary = [execute_llama_task_api(self.llm, instruction_prompts, system_prompt)]
-            print('generated response: ', summary)
-        elif self.model_name == "meta-llama/llama-3.3-70b-versatile":
-            summary = execute_groq_task_api(self.llm, json_schema, instruction_prompts, system_prompt)
-            summary = [robj['response'] for robj in summary]
-            print('generated response: ', summary[0])
-        else:
-            prompt_tokens = [get_prompt_token(instruction_prompt, system_prompt, self.tokenizer)]
-            outputs = execute_LLM_tasks(self.llm, prompt_tokens, max_new_tokens=8192, temperature=0.6, top_p=0.9)
-            summary = [outputs[0].outputs[0].text.strip()]
-            print(f'generated response: ', summary)
-
-        return summary
+    def __init__(self, model_index:int = 6, prompt_batch_size: int = 1,
+        query_type:str = 'summarization', query_hop_span: str = 'multi_doc'):
+        super().__init__(model_index = model_index, prompt_batch_size = prompt_batch_size)
+        self.query_type = query_type
+        self.query_hop_span = query_hop_span
 
     def __generate_queries_in_single_prompt(self, groundings_doc_text, metadata, entity):
         
         qstn_instruction_prompt = SUMM_QSTN_INSTRUCTION_PROMPT
-        if self.qstn_type == 'entity_interaction_analysis':
+        if self.query_type == 'entity_interaction_analysis':
             qstn_instruction_prompt = ETINT_QSTN_INSTRUCTION_PROMPT
-        elif self.qstn_type == 'temporal_analysis':
+        elif self.query_type == 'temporal_analysis':
             qstn_instruction_prompt = TMP_QSTN_INSTRUCTION_PROMPT
-        elif self.qstn_type == 'event_interaction_analysis':
+        elif self.query_type == 'event_interaction_analysis':
             qstn_instruction_prompt = EVTINT_QSTN_INSTRUCTION_PROMPT
-        elif self.qstn_type == 'numerical_analysis':
+        elif self.query_type == 'numerical_analysis':
             qstn_instruction_prompt = NUM_QSTN_INSTRUCTION_PROMPT
         else:
             qstn_instruction_prompt = SUMM_QSTN_INSTRUCTION_PROMPT
 
         qstn_instruction_prompt = qstn_instruction_prompt + f"\nMetadata: {metadata}\nGroundings: {groundings_doc_text}\nEntity: {entity}"
-        qstn_system_prompt = "You are a helpful assistant, that given a list of groundings, generates meaningful and complex questions from it."
+        qstn_system_prompt = QUERY_SYSTEM_PROMPT
         query_strs = []
         if self.model_name == "meta-llama/llama-3.3-70b-versatile":
-            query_json_schema = {
-                "type": "json_object",
-                "name": "query_generation",
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "queries": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "required": ["queries"],
-                    "additionalProperties": False
-                }
-            }
-
-            qsummary = self.__get_output_from_llm([qstn_instruction_prompt], qstn_system_prompt, query_json_schema)
+            query_json_schema = QUERY_JSON_SCHEMA
+            qsummary, _ = self.get_output_from_llm([qstn_instruction_prompt], qstn_system_prompt, query_json_schema)
         else:
-            qsummary = self.__get_output_from_llm([qstn_instruction_prompt], qstn_system_prompt, query_json_schema)
+            qsummary, _ = self.get_output_from_llm([qstn_instruction_prompt], qstn_system_prompt, None)
         qjson = extract_json_array_by_key(qsummary[0], "queries")
         if qjson != None and len(qjson) > 0:
             query_strs = [qj for qj in qjson if is_valid_sentence(qj, 150)]
         
         return query_strs
         
-    def set_filename(self, filename):
-        self.filename = filename
-        self.company_name = COMPANY_DICT[filename.split('_')[1]]
-
-    def merge_all_groundings(self, companies, entity):
+    def __merge_all_groundings(self, companies):
         
         all_groundings = []
         for cp in companies:
             fn = COMPANY_DICT[cp]["filename"]
             cp_name = COMPANY_DICT[cp]['company_name']
-            chunk_store_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{fn}_chunk_store.json'
+            chunk_store_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{cp}/{fn}_chunk_store.json'
             with open(chunk_store_fp, 'r') as fp:
                 chunk_store = json.load(fp)
             chunk_arr = chunk_store["chunks"]
 
             for ci, chunk in enumerate(chunk_arr):
                 if "groundings" in chunk and len(chunk["groundings"]) > 0:
-                    filtered_groundings = [gobj for gobj in chunk["groundings"] if gobj['entity'].lower() == entity.lower()]
-                    for gi, gobj in enumerate(filtered_groundings):
-                        filtered_groundings[gi] = gobj | { 'company_code': cp, 'company_name': cp_name, 'chunk_index': ci }
+                    #filtered_groundings = [gobj for gobj in chunk["groundings"] if gobj['entity'].lower() == entity.lower()]
+                    #for gi, gobj in enumerate(filtered_groundings):
+                        #filtered_groundings[gi] = gobj | { 'company_code': cp, 'company_name': cp_name, 'chunk_index': ci }
                     #all_groundings.append({'company_name': cp_name, 'chunk_index': ci, 'groundings': filtered_groundings})
-                    all_groundings.extend(filtered_groundings)
+                    all_groundings.extend(chunk["groundings"])
         return all_groundings
-        
-    def generate_query(self, no_of_qstns = 5, no_of_entities = 20):
 
-        all_resp = []
-        if self.model_folder == "gemini":
-            chunk_store_fp = f'data/chunked_data/global_chunk_store/qwq/{self.filename}_chunk_store.json'
-            sampled_entities_fp = f'data/chunked_data/global_chunk_store/qwq/{self.filename}_sampled_entities.json'
-        else:
-            chunk_store_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{self.filename}_chunk_store.json'
-            sampled_entities_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{self.filename}_sampled_entities.json'
+    def __get_questions(self,
+        filtered_groundings: List[Any], all_resp: Dict[str, Any],
+        entity: str, docs_considered = List[str],
+        no_of_qstns: int = 1):
 
-        if os.path.exists(chunk_store_fp) and os.path.exists(sampled_entities_fp):
+        while len(all_resp[entity]) < no_of_qstns:
+            '''
+            for fbi,i in enumerate(range(0, len(filtered_groundings), MAX_GROUNDINGS_TO_SAMPLE)):
+                groundings_subarr = filtered_groundings[i:i+MAX_GROUNDINGS_TO_SAMPLE]
+                if len(groundings_subarr) < MIN_GROUNDINGS_NEEDED_FOR_GENERATION:
+                    max_len = max(MAX_GROUNDINGS_TO_SAMPLE, len(filtered_groundings))
+                    groundings_subarr = filtered_groundings[-max_len:]
+            '''
+            groundings_subarr = filtered_groundings    
+            chunks_reduced = [(gobj['doc_code'], gobj['chunk_index']) for gobj in groundings_subarr]
+            chunks_used = list(set(chunks_reduced))
+            chunks_used = [{ 'doc_code': cobj[0], 'chunk_index': cobj[1]} for cobj in chunks_used]
+            #groundings_str = "[" + ",\n".join("{'text':" + f"{item['text']}" + ", 'company_name':" + f"{item['company_name']}" + "}" for item in groundings_subarr) + "]"
+            #print('groundings subarr', groundings_subarr)
+            groundings_str = json.dumps(
+                [{"text": item["text"], "company_name": COMPANY_DICT[item["doc_code"]]["company_name"]} for item in groundings_subarr],
+                indent=2
+            )
+            print(f'\nRunning query  generation for entity: ', entity)
+            metadata = f'Input source: SEC 10-K Filings | Companies addressed in the groundings: {",".join(list(map(lambda x: COMPANY_DICT[x]["company_name"], docs_considered)))}'
+            query_strs = self.__generate_queries_in_single_prompt(groundings_str, metadata, entity)
+            all_resp[entity].extend([{'query': query_str, 'query_hop_span': self.query_hop_span, 'docs_considered': docs_considered, 'groundings': groundings_subarr, 'chunks_used': chunks_used, 'intended_query_type': [self.query_type] } for query_str in query_strs])
+            print(f'No of queries formed using entity {entity}: ', len(all_resp[entity]))
+            #sleep(60)
+            '''
+            if len(all_resp[entity]) >= no_of_qstns:
+                break
+            '''
+        return all_resp
+
+    def generate_query(self, no_of_qstns:int = 5, no_of_entities:int = 20):
+
+        #all_resp = []
+        chunk_store_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{self.filecode}/{self.filename}_chunk_store.json'
+        sampled_entities_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{self.filecode}/{self.filename}_sampled_entities.json'
+        sampled_doc_groups_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/sampled_doc_groups.json'
+
+        if os.path.exists(chunk_store_fp) and ((self.query_hop_span == 'single_doc' and os.path.exists(sampled_entities_fp)) or (self.query_hop_span == 'multi_doc' and os.path.exists(sampled_doc_groups_fp))):
             with open(chunk_store_fp, 'r') as fp:
                 chunk_store = json.load(fp)
             chunk_arr = chunk_store["chunks"]
+
+            # get sampled entities / doc groups
+            if self.query_hop_span == 'single_doc':
+                with open(sampled_entities_fp, 'r') as fp:
+                    sampled_entities = json.load(fp)['sampled_entities']
+                iquery_json_path = f'./intermediate_data/query_sets/{self.model_folder}/single_doc/{self.filecode}/{self.filename}_generated_queries.json'
+            else:
+                iquery_json_path = f'./intermediate_data/query_sets/{self.model_folder}/multi_doc/multi_doc_generated_queries.json'
+                #sampled_entities = ["Ai", "Intangible Assets", "Data Center"]
+                with open(sampled_doc_groups_fp, 'r') as fp:
+                    sampled_doc_groups_info = json.load(fp)
+
+                sampled_entities = list(sampled_doc_groups_info.keys())
+                #relevant_companies = ['NVDA', 'AMD', 'INTC']
+                relevant_companies = set([])
+                for sek in sampled_entities:
+                    doc_groups = sampled_doc_groups_info[sek]
+                    for dcg in doc_groups:
+                        for doc in dcg:
+                            relevant_companies.add(doc)
+                relevant_companies = list(relevant_companies)
 
             all_groundings = []
-            for ci, chunk in enumerate(chunk_arr):
-                if "groundings" in chunk and len(chunk["groundings"]) > 0:
-                    all_groundings.append({'chunk_index': ci, 'groundings': chunk["groundings"]})
+            if self.query_hop_span == 'single_doc':
+                for ci, chunk in enumerate(chunk_arr):
+                    if "groundings" in chunk and len(chunk["groundings"]) > 0:
+                        all_groundings.append({'chunk_index': ci, 'groundings': chunk["groundings"]})
+            else:
+                all_groundings = self.__merge_all_groundings(relevant_companies)
 
             print('length of the entire groundings array: ', len(all_groundings))
 
-            '''
-            with open(sampled_entities_fp, 'r') as fp:
-                sampled_entities = json.load(fp)['sampled_entities']
-            '''
-            sampled_entities = ["Ai", "Intangible Assets", "Data Center"]
-            relevant_companies = ['NVDA', 'AMD', 'INTC']
+            
 
-            metadata = f'SEC Filing: 10-K'
             all_resp = {}
-            print('\nStarting query generation for batch of factoids\n')
+            print('\nStarting query generation for batch of groundings\n')
             total_q = 0
 
             for ei in range(no_of_entities):
                 entity = sampled_entities[ei]
-                attempts = 0
                 all_resp[entity] = []
                 filtered_groundings = []
-                '''
-                for gobj in all_groundings:
-                    ci = gobj['chunk_index']
-                    rel_groundings = [{'chunk_index': ci, 'entity': entity, 'text': gr['text'] } for gr in gobj['groundings'] if gr['entity'] == entity]
-                    filtered_groundings.extend(rel_groundings)
-                '''
+
+                if self.query_hop_span == 'single_doc':
+                    for gobj in all_groundings:
+                        ci = gobj['chunk_index']
+                        rel_groundings = [{'chunk_index': ci, 'entity': entity, 'text': gr['text'] } for gr in gobj['groundings'] if gr['entity'] == entity]
+                        filtered_groundings.extend(rel_groundings)
+                    
+                    print(f'No of groundings under entity {entity}: ', len(filtered_groundings))
+                    
+                    all_resp = self.__get_questions(filtered_groundings = filtered_groundings, all_resp = all_resp,
+                        entity = entity, docs_considered = [self.filecode],
+                        no_of_qstns = no_of_qstns)
+                else:
+                    doc_groups = sampled_doc_groups_info[entity]
+                    filtered_groundings = []
+                    print('doc groups', doc_groups)
+                    print('\nall groundings: ', len(all_groundings), all_groundings)
+                    for dcg in doc_groups:
+                        filtered_groundings.extend([gobj for gobj in all_groundings if gobj['entity'] == entity and gobj['doc_code'] in dcg])
+                        print('filtered groundings: ', filtered_groundings)
+                        print(f'No of groundings under entity {entity}: ', len(filtered_groundings))
+                        if len(filtered_groundings) > 0:
+                            all_resp = self.__get_questions(filtered_groundings = filtered_groundings, all_resp = all_resp,
+                            entity = entity, docs_considered = dcg,
+                            no_of_qstns = no_of_qstns)
+                    total_q += len(all_resp[entity])
                 
-                filtered_groundings = self.merge_all_groundings(relevant_companies, entity)
-                print(f'No of groundings under entity {entity}: ', len(filtered_groundings))
-
-                while len(all_resp[entity]) < no_of_qstns:
-                    '''
-                    if len(filtered_groundings) >= MAX_GROUNDINGS_TO_SAMPLE:
-                        groundings_subarr = random.sample(filtered_groundings, MAX_GROUNDINGS_TO_SAMPLE)
-                    elif len(filtered_groundings) >= MIN_GROUNDINGS_NEEDED_FOR_GENERATION and len(filtered_groundings) < MAX_GROUNDINGS_TO_SAMPLE:
-                        groundings_subarr = random.sample(filtered_groundings, MIN_GROUNDINGS_NEEDED_FOR_GENERATION)
-                    else:
-                        groundings_subarr = filtered_groundings
-                    '''
-
-                    '''
-                    for fbi,i in enumerate(range(0, len(filtered_groundings), MAX_GROUNDINGS_TO_SAMPLE)):
-                        groundings_subarr = filtered_groundings[i:i+MAX_GROUNDINGS_TO_SAMPLE]
-                        if len(groundings_subarr) < MIN_GROUNDINGS_NEEDED_FOR_GENERATION:
-                            max_len = max(MAX_GROUNDINGS_TO_SAMPLE, len(filtered_groundings))
-                            groundings_subarr = filtered_groundings[-max_len:]
-                    '''
-                    groundings_subarr = filtered_groundings    
-                    chunks_reduced = [(gobj['company_code'], gobj['company_name'], gobj['chunk_index']) for gobj in groundings_subarr]
-                    chunks_used = list(set(chunks_reduced))
-                    chunks_used = [{ 'company_code': cobj[0], 'company_name': cobj[1], 'chunk_index': cobj[2]} for cobj in chunks_used]
-                    #groundings_str = "[" + ",\n".join("{'text':" + f"{item['text']}" + ", 'company_name':" + f"{item['company_name']}" + "}" for item in groundings_subarr) + "]"
-                    #print('groundings subarr', groundings_subarr)
-                    groundings_str = json.dumps(
-                        [{"text": item["text"], "company_name": item["company_name"]} for item in groundings_subarr],
-                        indent=2
-                    )
-                    print(f'\nRunning query  generation for entity: ', entity)
-                    query_strs = self.__generate_queries_in_single_prompt(groundings_str, metadata, entity)
-                    total_q += len(query_strs)
-                    all_resp[entity].extend([{'query': query_str, 'qstn_hop_span': 'multi_doc', 'docs_considered': relevant_companies, 'groundings': groundings_subarr, 'chunks_used': chunks_used, 'intended_qstn_type': [self.qstn_type] } for query_str in query_strs])
-                    print(f'No of queries formed using entity {entity}: ', len(all_resp[entity]))
-                    #sleep(60)
-                    '''
-                    if len(all_resp[entity]) >= no_of_qstns:
-                        break
-                    '''
-                attempts += 1
-                        
             if all_resp != {}:
                 print('\nTotal no of questions generated: ', total_q)
-                iquery_json_path = f'./intermediate_data/query_sets/{self.model_folder}/{self.filename}_generated_queries.json'
+                #iquery_json_path = f'./intermediate_data/query_sets/{self.model_folder}/{self.filename}_generated_queries.json'
                 queries = { 'queries': {} }
                 queries["queries"] = all_resp
 
@@ -279,13 +219,6 @@ class QueryGenerator:
                     json.dump(queries, fp)
         else:
             raise SystemExit('Chunk store not found!')
-
-    def destroy(self):
-        print('Destroying llm object')
-        gc.collect()
-        torch.cuda.empty_cache()
-        print('Completed destruction...exiting...')
-        os._exit(0)
 
 if __name__ == "__main__":
     st = time()
@@ -295,25 +228,21 @@ if __name__ == "__main__":
     old_stdout = sys.stdout
     sys.stdout = log_file
 
-
-    #multiprocessing.set_start_method("spawn")  # Fixes CUDA issue with multiprocessing
-    torch.cuda.init()
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_index', type=int, default = 6, required = False)
     parser.add_argument('--no_of_qstns', type = int, default = 5, required = False)
-    parser.add_argument('--filename', type = str, default = '10-K_NVDA_20240128', required = False)
+    parser.add_argument('--filecode', type = str, default = 'NVDA', required = False)
     parser.add_argument('--no_of_entities', type = int, default = 20, required = False)
     parser.add_argument('--query_type', type = str, default = 'summarization', required = False)
+    parser.add_argument('--query_hop_span', type = str, default = 'multi_doc', required = False)
 
     args = parser.parse_args()
 
-    query_gen = QueryGenerator(model_index = args.model_index, qstn_type = args.query_type)
-    print(f'\n\nGenerating queries for file: {args.filename}')
-    query_gen.set_filename(args.filename)
+    query_gen = QueryGenerator(model_index = args.model_index, query_type = args.query_type)
+    print(f'\n\nGenerating queries for file: {args.filecode}')
+    query_gen.set_filename(args.filecode)
     query_gen.generate_query(no_of_qstns = args.no_of_qstns, no_of_entities = args.no_of_entities)
 
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')
     sys.stdout = old_stdout
     log_file.close()
-    query_gen.destroy()
