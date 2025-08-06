@@ -1,4 +1,4 @@
-QSTN_CLASSIFIER_PROMPT = """
+QUERY_CLASSIFICATION_INSTRUCTION_PROMPT = """
     ### Task
     You are a question classification expert. Your task is to classify each question into one or more of the following categories:
     - temporal_analysis: these are questions that analyze how the values of one or more variables evolve over time. These questions should explicitly reference time periods (e.g., years, quarters, trends) and require reasoning about temporal change or patterns.
@@ -18,6 +18,27 @@ QSTN_CLASSIFIER_PROMPT = """
 
     ### Input for your task:
 """
+
+QUERY_CLASSIFICATION_SYSTEM_PROMPT = "You are a helpful assistant, that given a query performs a multi-class classification of the query"
+
+QUERY_CLASSIFICATION_JSON_SCHEMA = {
+    "type": "json_object",
+    "name": "question_classification",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "categories": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
+        "required": ["categories"],
+        "additionalProperties": False
+    }
+}
+
 
 # instruct GPT to give definition refineement for 10-K filing
 # Temporal analysis - analyze how the values of a set variables change within a specific time period.

@@ -13,6 +13,7 @@ from src.groundings_generator import GroundingsGenerator
 from src.query_set_generation.query_generator import QueryGenerator
 from src.query_set_generation.answer_generator import AnswerGenerator
 from src.query_set_generation.citation_generator import CitationGenerator
+from src.query_set_generation.query_classifier import QueryClassifier
 
 def get_script_status():
     with open('./script_status.json', 'r') as fp:
@@ -169,6 +170,22 @@ if __name__ == "__main__":
             print(f'\n\nGenerating answers for filecode: {args.filecode}')
             cit_gen.set_filename(args.filecode)
             cit_gen.generate_citations(no_of_entities = args.no_of_entities)
+    elif args.step == "query_classification":
+        if args.query_hop_span == "multi_doc":
+            with open(doc_groups_fp, 'r') as fp:
+                doc_groups_info = json.load(fp)
+            noe = len(doc_groups_info)
+            query_classifier = QueryClassifier(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size,
+                query_hop_span = 'multi_doc')
+            print(f'\n\nGenerating answers for filecode: {args.filecode}')
+            query_classifier.set_filename('NVDA')
+            query_classifier.classify_query(no_of_entities = noe)
+        else:
+            query_classifier = QueryClassifier(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size,
+                query_hop_span = 'single_doc')
+            print(f'\n\nGenerating answers for filecode: {args.filecode}')
+            query_classifier.set_filename(args.filecode)
+            query_classifier.classify_query(no_of_entities = args.no_of_entities)
     else:
         print('Invalid step name passed!')
         SystemExit()
