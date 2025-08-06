@@ -1,8 +1,11 @@
 import json
 import os
+from src.consts.company_consts import COMPANY_DICT
 
-chunk_store_data_path = 'data/chunked_data/global_chunk_store/llama/NVDA'
-chunk_store_fp = os.path.join(chunk_store_data_path, f'10-K_NVDA_20240128_chunk_store.json')
+code = 'INTC'
+chunk_store_data_path = f'data/chunked_data/global_chunk_store/llama/{code}'
+fname = COMPANY_DICT[code]['filename']
+chunk_store_fp = os.path.join(chunk_store_data_path, f'{fname}_chunk_store.json')
 #entities_to_retain = ['Suppliers', 'Technologies']
 entities_to_retain = []
 
@@ -14,11 +17,15 @@ for ci, chunk in enumerate(chunk_store["chunks"]):
         groundings = chunk_store["chunks"][ci]["groundings"]
         if len(entities_to_retain) > 0:
             filtered_groundings = [grobj for grobj in groundings if grobj['entity'] in entities_to_retain]
+            chunk_store["chunks"][ci]["groundings"] = filtered_groundings
+            chunk_store["chunks"][ci]["groundings_versions"] = []
+            chunk_store["chunks"][ci]["groundings_token_count"] = 0.0
         else:
-            filtered_groundings = []
-        chunk_store["chunks"][ci]["groundings"] = filtered_groundings
-        chunk_store["chunks"][ci]["groundings_versions"] = []
-        chunk_store["chunks"][ci]["groundings_token_count"] = 0.0
+            ckeys = list(chunk_store["chunks"][ci].keys())
+            for ck in ckeys:
+                if ck != "chunk_index" and ck != "entities":
+                    del chunk_store["chunks"][ci][ck]
+
         #del chunk_store["chunks"][ci]["groundings"]
 
 with open(chunk_store_fp, 'w') as fp:

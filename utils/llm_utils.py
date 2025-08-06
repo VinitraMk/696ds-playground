@@ -79,43 +79,47 @@ def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, te
         results = []
 
         for prompt in prompts:
-            attempt = 0
+            if prompt != None and prompt != "":
+                attempt = 0
 
-            success = False
+                success = False
 
-            while attempt < max_retries:
-                try:
-                    messages = [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt}
-                    ]
-                    completion = await llm_model.chat.completions.create(
-                        model="llama-3.3-70b-versatile",
-                        messages=messages,
-                        temperature=temperature,
-                        max_completion_tokens=max_completion_tokens,
-                        stream=False,
-                        response_format=response_format,
-                        stop=None,
-                    )
-                    results.append({'response': completion.choices[0].message.content, 'prompt_tokens': completion.usage.prompt_tokens, 'output_tokens': completion.usage.completion_tokens })
-                    success = True
-                    break
+                while attempt < max_retries:
+                    try:
+                        messages = [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": prompt}
+                        ]
+                        completion = await llm_model.chat.completions.create(
+                            model="llama-3.3-70b-versatile",
+                            messages=messages,
+                            temperature=temperature,
+                            max_completion_tokens=max_completion_tokens,
+                            stream=False,
+                            response_format=response_format,
+                            stop=None,
+                        )
+                        results.append({'response': completion.choices[0].message.content, 'prompt_tokens': completion.usage.prompt_tokens, 'output_tokens': completion.usage.completion_tokens })
+                        success = True
+                        break
 
-                except Exception as e:
-                    attempt += 1
-                    print(f"[Attempt {attempt}] Error during request: {e}")
-                    if attempt < max_retries:
-                        await asyncio.sleep(1.5)
-                    else:
-                        print(f"Failed after {max_retries} attempts. Exiting.")
-                        SystemExit()
+                    except Exception as e:
+                        attempt += 1
+                        print(f"[Attempt {attempt}] Error during request: {e}")
+                        if attempt < max_retries:
+                            await asyncio.sleep(1.5)
+                        else:
+                            print(f"Failed after {max_retries} attempts. Exiting.")
+                            SystemExit()
 
-            if not success:
-                SystemExit("Groq api responded with errors!")
+                if not success:
+                    SystemExit("Groq api responded with errors!")
+            else:
+                results.append({ 'response': "", 'prompt_tokens': 0, 'output_tokens': 0 })
         
         return results
 
     delta_responses = asyncio.run(process_messages(prompts))
 
     return delta_responses
+

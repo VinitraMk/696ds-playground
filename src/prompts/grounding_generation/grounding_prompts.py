@@ -1,6 +1,4 @@
 
-
-
 GROUNDING_INSTRUCTION_PROMPT = """
     ### Task:
     Analyze the provided chunk of text, the entity and the metadata about the text and generate a detailed 
@@ -87,8 +85,8 @@ GROUNDING_EVALUATION_PROMPT = """
 
 GROUNDING_REFINEMENT_PROMPT = """
     ### Task:
-    Analyze the provided chunk of text, the entity, the metadata about the text and a list of sentences summarizing
-    from the chunk of text addressing the entity (groundings). Also consider the evaluation of the evaluation information provided, the individual score
+    Analyze the provided chunk of text, the entity, the metadata about the text and a list of sentences (called groundings) summarizing statements
+    from the chunk of text that address the entity. Also consider the evaluation information provided, the individual score of each criteria
     and the justification. Understand the individual metric scores and justification and refine the groundings
     to improve the individual metric scores and addresses weaknesses explained in the justification.
 

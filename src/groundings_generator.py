@@ -26,10 +26,12 @@ class GroundingsGenerator(Generator):
         return clean_sentences
 
     def __generate_groundings(self, chunk_texts, entity, metadata):
-        grounding_instruction_prompt = GROUNDING_INSTRUCTION_PROMPT
-
-        grounding_instruction_prompts = [grounding_instruction_prompt + f"\nText: {chunk['text']}\nEntity: {entity}\nMetadata: {metadata}" for chunk in chunk_texts]
+         
         groundings_set = {}
+
+        grounding_instruction_prompt = GROUNDING_INSTRUCTION_PROMPT
+        grounding_instruction_prompts = [grounding_instruction_prompt + f"\nText: {chunk['text']}\nEntity: {entity}\nMetadata: {metadata}" for chunk in chunk_texts]
+
         if self.model_name == "meta-llama/llama-3.3-70b-versatile":
             groundings_json_schema = GROUNDING_JSON_SCHEMA
             evaluation_json_schema = GROUNDING_EVAL_JSON_SCHEMA
@@ -41,81 +43,179 @@ class GroundingsGenerator(Generator):
         grounding_system_prompt = GROUNDING_SYSTEM_PROMPT
         evaluation_system_prompt = GROUNDING_EVAL_SYSTEM_PROMPT
         grounding_refinement_system_prompt = GROUNDING_REFINEMENT_SYSTEM_PROMPT
+        grin_count = len(grounding_instruction_prompts)
 
-        for gi, grounding_instruction_prompt in enumerate(grounding_instruction_prompts):
-            groundings = []
+        for bi in range(0, grin_count, self.prompt_batch_size):
+            batch_grounding_instruction_prompts = grounding_instruction_prompts[bi:bi+self.prompt_batch_size]
+            batch_chunks = chunk_texts[bi:bi+self.prompt_batch_size]
+            bchunk_indices = list(map(lambda x: x['chunk_index'], batch_chunks))
+
+            # initial groundings generation
+            print('length of valid initial groundings prompts', len(batch_grounding_instruction_prompts))
+            gsummaries, gstats = self.get_output_from_llm(batch_grounding_instruction_prompts, grounding_system_prompt, groundings_json_schema)
+            batch_gjson_arr = {}
             grounding_versions = {}
 
-            #initial groundings
-            gsummary, gstats = self.get_output_from_llm([grounding_instruction_prompt], grounding_system_prompt, groundings_json_schema)
-            gjson_arr = extract_json_array_by_key(gsummary[0], "groundings")
+            # initial groundings response parsing
+            for bsi, ci in enumerate(bchunk_indices):
+                gjson_arr = extract_json_array_by_key(gsummaries[bsi], "groundings")
+                if gjson_arr != None and len(gjson_arr) > 0:
+                    batch_gjson_arr[ci] = gjson_arr
+                    grounding_versions[ci] = {
+                        0: {
+                            "groundings": gjson_arr,
+                            "groundings_score": 0
+                        }
+                    }
+                else:
+                    batch_gjson_arr[ci] = []
+                    grounding_versions[ci] = {
+                        0: {
+                            "groundings": [],
+                            "groundings_score": 0
+                        }
+                    }
 
-            # grounding evaluation and refinement
-            if gjson_arr != None and len(gjson_arr) > 0:
-                gjson_arr_improved = gjson_arr
-                gjson_arr_best = gjson_arr
+            # initial groundings evaluation
+            gjson_arr_bests = {}
+            eval_prompt_texts = {}
 
-                grounding_str = ",".join(gjson_arr_best)
-                eval_prompt_text = eval_prompt.format(entity = entity,
-                    chunk = chunk_texts[gi]['text'],
-                    metadata = metadata,
-                    groundings = grounding_str)
+            for bsi, ci in enumerate(bchunk_indices):
+                if len(batch_gjson_arr[ci]) > 0:
+                    gjson_arr_bests[ci] = batch_gjson_arr[ci]
 
-                esummary, _ = self.get_output_from_llm([eval_prompt_text], evaluation_system_prompt, evaluation_json_schema)
-                evaluation_obj = extract_json_object_by_key(esummary[0], "evaluation")
-                eval_best = evaluation_obj
-                gbest_stats = gstats
-                ts = evaluation_obj['entity_relevance'] + evaluation_obj['source_faithfulness'] + evaluation_obj['key_info_coverage'] + evaluation_obj['numeric_recall'] + evaluation_obj['non_redundancy']
-                #sleep(90)
+                    grounding_str = ",".join(gjson_arr_bests[ci])
+                    eval_prompt_texts[ci] = eval_prompt.format(entity = entity,
+                        chunk = batch_chunks[bsi]['text'],
+                        metadata = metadata,
+                        groundings = grounding_str)
+                else:
+                    eval_prompt_texts[ci] = ""
 
-                tsmax = ts
-                no_of_attempts = 0
-                grv = len(grounding_versions.keys())
-                grounding_versions[grv] = gjson_arr
+            print('no of valid eval prompts: ', len([p for p in eval_prompt_texts if p != ""]))
+            esummaries, _ = self.get_output_from_llm(list(eval_prompt_texts.values()), evaluation_system_prompt, evaluation_json_schema)
 
-                while tsmax < 5 and no_of_attempts < NO_OF_TRIALS:
-                    
-                    # grounding refinement initialization
-                    grounding_str = ",".join(gjson_arr_best)
-                    eval_str = str(eval_best)
-                    chunk_text = chunk_texts[gi]['text']
-                    grounding_refinement_prompt = GROUNDING_REFINEMENT_PROMPT + f"\nText: {chunk_text}\nEntity: {entity}\nMetadata: {metadata}\nGroundings: {grounding_str}\nEvaluation: {eval_str}"
-                    grsummary, gstats = self.get_output_from_llm([grounding_refinement_prompt], grounding_refinement_system_prompt, groundings_json_schema)
-                    gjson_arr_improved = extract_json_array_by_key(grsummary[0], "groundings")
-                    #sleep(90)
+            # initial groundings evaluation response parsing
+            eval_bests = {}
+            gbest_stats = {}
+            TSMAX = {}
+            nt = 0
+            all_trial_status = [0] * len(bchunk_indices)
+            for bsi, ci in enumerate(bchunk_indices):
+                if esummaries[bsi] != "":
+                    evaluation_obj = extract_json_object_by_key(esummaries[bsi], "evaluation")
+                    eval_bests[ci] = evaluation_obj
+                    gbest_stats[ci] = gstats[bsi]
+                    ts = evaluation_obj['entity_relevance'] + evaluation_obj['source_faithfulness'] + evaluation_obj['key_info_coverage'] + evaluation_obj['numeric_recall'] + evaluation_obj['non_redundancy']
+                    TSMAX[ci] = ts
+                    grounding_versions[ci][0]['groundings_score'] = ts
+                else:
+                    eval_bests[ci] = None
+                    gbest_stats[ci] = None
+                    TSMAX[ci] = 0
+                    all_trial_status[bsi] = 1
+                    grounding_version[ci][0]['groundings_score'] = 0
+            
 
-                    # refined grounding evaluation
-                    if gjson_arr_improved != None and len(gjson_arr_improved) > 0:
-                        grv = len(grounding_versions.keys())
-                        grounding_versions[grv] = gjson_arr_improved
-                        grounding_str = ",".join(gjson_arr_improved)
-                        eval_prompt_text = eval_prompt.format(entity = entity,
-                            chunk = chunk_texts[gi]['text'],
+            while nt < NO_OF_TRIALS:
+                
+                # break if all batch groundings score 5
+                count_of_completed = all_trial_status.count(1)
+                if count_of_completed == len(bchunk_indices):
+                    break
+
+                # grounding refinement
+                grounding_ref_prompts = {}                
+                for bsi, ci in enumerate(bchunk_indices):
+                    if all_trial_status[bsi] == 0 and len(gjson_arr_bests[ci]) > 0 and eval_bests[ci] != None:
+                        eval_str = str(eval_bests[ci])
+                        grounding_str = ",".join(gjson_arr_bests[ci])
+                        chunk_text = batch_chunks[bsi]['text']
+                        grounding_ref_prompts[ci] = GROUNDING_REFINEMENT_PROMPT + f"\nText: {chunk_text}\nEntity: {entity}\nMetadata: {metadata}\nGroundings: {grounding_str}\nEvaluation: {eval_str}"
+                    else:
+                        grounding_ref_prompts[ci] = ""
+
+                # refined groundings response collection
+                print('no of valid grounding refinement prompts: ', len([p for p in grounding_ref_prompts.values() if p != ""])) 
+                gsummaries, gstats = self.get_output_from_llm(list(grounding_ref_prompts.values()), grounding_refinement_system_prompt, groundings_json_schema)
+                batch_gjson_arr = {}
+                for bsi, ci in enumerate(bchunk_indices):
+                    gjson_arr = extract_json_array_by_key(gsummaries[bsi], "groundings")
+
+                    if all_trial_status[bsi]:
+                        batch_gjson_arr[ci] = []
+                        continue
+
+                    if gjson_arr != None and len(gjson_arr) > 0:
+                        batch_gjson_arr[ci] = gjson_arr
+                    else:
+                        batch_gjson_arr[ci] = []
+
+                # refined groundings evaluation
+                eval_prompt_texts = {}
+                for bsi, ci in enumerate(bchunk_indices):
+                    if all_trial_status[bsi] == 0 and len(batch_gjson_arr[ci]) > 0:
+                        grounding_str = ",".join(batch_gjson_arr[ci])
+                        eval_prompt_texts[ci] = eval_prompt.format(entity = entity,
+                            chunk = batch_chunks[bsi]['text'],
                             metadata = metadata,
                             groundings = grounding_str)
-                        esummary, _ = self.get_output_from_llm([eval_prompt_text], evaluation_system_prompt, evaluation_json_schema)
-                        evaluation_obj = extract_json_object_by_key(esummary[0], "evaluation")
-                        ts = evaluation_obj['entity_relevance'] + evaluation_obj['source_faithfulness'] + evaluation_obj['key_info_coverage'] + evaluation_obj['numeric_recall'] + evaluation_obj['non_redundancy']
-                        if ts > tsmax:
-                            tsmax = ts
-                            gjson_arr_best = gjson_arr_improved
-                            eval_best = evaluation_obj
-                            gbest_stats = gstats
-                        no_of_attempts+=1
-                    #sleep(90)
+                    else:
+                        eval_prompt_texts[ci] = ""
 
-                # best grounding cleanup
-                if gjson_arr_best!= None and len(gjson_arr_best) > 0:
-                    #clean_g = self.__extract_and_clean_groundings(gjson_arr_best)
-                    gop_avg = gbest_stats[0]['output_tokens'] / len(gjson_arr_best)
+                print('no of valid eval prompts: ', len([p for p in eval_prompt_texts if p != ""])) 
+                esummaries, _ = self.get_output_from_llm(list(eval_prompt_texts.values()), evaluation_system_prompt, evaluation_json_schema)
+
+                # evaluation response
+                for bsi, ci in enumerate(bchunk_indices):
+                    if all_trial_status[bsi] == 1:
+                        continue
+                    if esummaries[bsi] != "":
+                        
+                        evaluation_obj = extract_json_object_by_key(esummaries[bsi], "evaluation")
+                        ts = evaluation_obj['entity_relevance'] + evaluation_obj['source_faithfulness'] + evaluation_obj['key_info_coverage'] + evaluation_obj['numeric_recall'] + evaluation_obj['non_redundancy']
+                        grv = len(grounding_versions[ci])
+                        grounding_versions[ci][grv] = {
+                            'groundings': batch_gjson_arr[ci],
+                            'groundings_score': ts
+                        }
+                        if ts > TSMAX[ci]:
+                            eval_bests[ci] = evaluation_obj
+                            gbest_stats[ci] = gstats[bsi]
+                            TSMAX[ci] = ts
+                            gjson_arr_bests[ci] = batch_gjson_arr[ci]
+                            if ts == 5:
+                                all_trial_status[bsi] = 1
+                    else:
+                        grv = len(grounding_versions[ci])
+                        grounding_versions[ci][grv] = {
+                            'groundings': batch_gjson_arr[ci],
+                            'groundings_score': 0
+                        }
+                
+                # ---- final counter for trials ------ #
+                nt += 1
+            
+            # set the best in groundings set
+            for bsi, ci in enumerate(bchunk_indices):
+                gjson_arr_best = gjson_arr_bests[ci]
+                if gjson_arr_best != None and len(gjson_arr_best) > 0:
+                    groundings = []
+                    gop_avg = gbest_stats[ci]['output_tokens'] / len(gjson_arr_best)
                     for gc in gjson_arr_best:
                         groundings.append({'doc_code': self.filecode, 'text': gc, 'entity': entity, 'average_output_tokens': gop_avg})
-            
-            groundings_set[chunk_texts[gi]['chunk_index']] = {
-                'best_groundings': groundings,
-                'all_versions': grounding_versions
-            }
-
+                    groundings_set[ci] = {
+                        'groundings_score': TSMAX[ci],
+                        'best_groundings': groundings,
+                        'all_versions': grounding_versions[ci]
+                    }
+                else:
+                    groundings_set[ci] = {
+                        'groundings_score': 0,
+                        'best_groundings': [],
+                        'all_versions': []
+                    }
+                    
         return groundings_set
 
     def __sample_entities(self, entities_info, count_range = (5, 15), k = 10):
@@ -125,17 +225,6 @@ class GroundingsGenerator(Generator):
         sampled_entities = random.sample(relevant_entities.keys(), min_k)
         return sampled_entities
         
-        '''
-
-        with open('./sampled_common_entities.json', 'r') as fp:
-            sampled_common_entities = json.load(fp)["common_entities"]
-
-        entities_to_ignore = [ek.lower() for ek in IGNORE_ENTITIES]
-        relevant_entities = [ek for ek in sampled_common_entities if ek.lower() not in entities_to_ignore]
-        sampled_entities = relevant_entities
-        return sampled_entities
-        '''
-
     def generate_groundings(self, skip_entity_sampling = False,
         use_bucket_entities = False,
         no_of_entities = 5,
@@ -204,19 +293,23 @@ class GroundingsGenerator(Generator):
                 else:
                     chunk_indices = entity_store[ek]["chunk_indices"]
                 print(f'No of chunks for entity {ek}: ', len(chunk_indices))
-
+                print(f'Chunk indices for entity {ek}', chunk_indices)
                 grounding_token_count = 0
                 for cix in range(0, len(chunk_indices), self.prompt_batch_size):
                     cix_batch = chunk_indices[cix:cix+self.prompt_batch_size]
+                    print('\n\ncix batch: ', cix_batch)
                     chunk_texts = [{ 'chunk_index': ci, 'text': chunk_arr[ci]} for ci in cix_batch]
                     entity_groundings = self.__generate_groundings(chunk_texts = chunk_texts, entity=ek, metadata=metadata)
+                    print('entity chunks: ', list(entity_groundings.keys()))
                     for ci in cix_batch:
                         print(f'Grounding for {ek} in chunk {ci}: ', entity_groundings[ci]['best_groundings'])
-                        if 'groundings' in chunk_store_arr[ci] and 'groundings_token_count' in chunk_store_arr[ci]:
+                        if 'groundings' in chunk_store_arr[ci]:
                             chunk_store_arr[ci]['groundings'].extend(entity_groundings[ci]['best_groundings'])
                             chunk_store_arr[ci]['groundings_versions'].append(entity_groundings[ci]['all_versions'])
                             chunk_store_arr[ci]['groundings_token_count'] += sum(map(lambda x: x['average_output_tokens'], entity_groundings[ci]['best_groundings']))
+                            chunk_store_arr[ci]['min_groundings_score'] = min(entity_groundings[ci]['groundings_score'], chunk_store_arr[ci]['min_groundings_score'])
                         else:
+                            chunk_store_arr[ci]['min_groundings_score'] = entity_groundings[ci]['groundings_score']
                             chunk_store_arr[ci]['groundings'] = entity_groundings[ci]['best_groundings']
                             chunk_store_arr[ci]['groundings_versions'] = [entity_groundings[ci]['all_versions']]
                             chunk_store_arr[ci]['groundings_token_count'] = sum(map(lambda x: x['average_output_tokens'], entity_groundings[ci]['best_groundings']))
