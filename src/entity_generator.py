@@ -129,9 +129,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    filename = COMPANY_DICT[args.filecode]['filename']
     entity_gen = EntityGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size)
-    entity_gen.set_filename(filename, args.filecode)
+    entity_gen.set_filename(args.filecode)
     entity_gen.generate_entities()
     
     print(f'\n\n### TIME TAKEN: {(time() - st)/60:.2f} mins')

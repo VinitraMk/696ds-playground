@@ -113,3 +113,60 @@ GROUNDING_REFINEMENT_PROMPT = """
 
     ### Input for your task
 """
+
+GROUNDING_SYSTEM_PROMPT = "You are a helpful assistant that given a chunk of text, an entity and some metadata about the text, returns groundings which are summarized statements related to the entity."
+GROUNDING_EVAL_SYSTEM_PROMPT = "You are a helpful assistant that given a chunk of text, an entity, some metadata about the text and groundings which which are summarized statements related to the entity, returns an evaluation of the quality of the grounding."
+GROUNDING_REFINEMENT_SYSTEM_PROMPT = "You are a helpful assistant that given a chunk of text, an entity, some metadata about the text, groundings which are summarized statements related to the entity and their evaluation, returns an improved set of groundings."
+
+GROUNDING_JSON_SCHEMA = {
+    "type": "json_object",
+    "name": "groundings_generation",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "groundings": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
+        "required": ["groundings"],
+        "additionalProperties": False
+    }
+}
+
+GROUNDING_EVAL_JSON_SCHEMA = {
+    "type": "json_object",
+    "name": "groundings_generation",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "evaluation": {
+                "type": "object",
+                "properties": {
+                    "entity_relevance": {
+                        "type": "string"
+                    },
+                    "source_faithfulness": {
+                        "type": "string"
+                    },
+                    "key_info_coverage": {
+                        "type": "string"
+                    },
+                    "numeric_recall": {
+                        "type": "string"
+                    },
+                    "non_redundancy": {
+                        "type": "string"
+                    },
+                    "justification": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "required": ["evaluation"],
+        "additionalProperties": False
+    }
+}

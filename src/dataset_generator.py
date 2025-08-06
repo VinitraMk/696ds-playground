@@ -2,14 +2,16 @@ import argparse
 from time import time
 import sys
 import json
+import os
 #from src.query_set_generation.query_generator import QueryGenerator
 #from src.query_set_generation.answer_generator import AnswerGenerator
-#from groundings_generator import GroundingsGenerator
 
 # custom imports
 from src.consts.company_consts import COMPANY_DICT, COMPANIES_POOL
+from src.consts.consts import MODELS
 from src.entity_generator import EntityGenerator
 from src.entity_grouper import EntityGrouper
+from src.groundings_generator import GroundingsGenerator
 
 def get_script_status():
     with open('./script_status.json', 'r') as fp:
@@ -32,7 +34,9 @@ if __name__ == "__main__":
     parser.add_argument('--query_type', type = str, default = 'multi_doc', required = False)
     parser.add_argument('--query_subtype', type = str, default = 'numerical_analysis', required = False)
     parser.add_argument('--step', type = str, default = 'query_gen', required = False)
-    parser.add_argument('--group_size', type = int, default = 3, required = False)
+    parser.add_argument('--bucket_size', type = int, default = 2, required = False)
+    parser.add_argument('--skip_entity_sampling', type = bool, default = False, required = False)
+    parser.add_argument('--use_bucket_entities', type = bool, default = True, required = False)
 
     args = parser.parse_args()
 
@@ -49,6 +53,12 @@ if __name__ == "__main__":
         companies_pool = [cp for cp in companies_pool if cp == args.filecode]
 
     script_status = get_script_status()
+    model_name = MODELS[args.model_index]
+    if "llama" in model_name.lower():
+        model_folder = "llama"
+
+    entity_stats_path = f'data/chunked_data/global_chunk_store/{model_folder}'
+    doc_entity_stats_fp = os.path.join(entity_stats_path, 'all_doc_entity_stats.json')
 
     # entity generation step
     if args.step == 'entity_gen':
@@ -57,14 +67,45 @@ if __name__ == "__main__":
                 continue
             update_script_status(script_status, cp, "ongoing")
             print(f'\n\nGeneration of entities for filecode: {cp}')
-            filename = COMPANY_DICT[cp]['filename']
             entity_gen = EntityGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size)
-            entity_gen.set_filename(filename = filename, filecode = cp)
+            entity_gen.set_filename(filecode = cp)
             entity_gen.generate_entities()
             update_script_status(script_status, cp, "completed")
-    if args.step == 'entity_group':
+    elif args.step == 'entity_group':
         entity_grp = EntityGrouper(model_index = args.model_index)
         entity_grp.group_entities()
+    elif args.step == 'groundings_gen':
+        if args.query_type == 'multi_doc':
+            with open(doc_entity_stats_fp, 'r') as fp:
+                doc_entity_mapping = json.load(fp)
+            bucket_groups = doc_entity_mapping[f'{args.bucket_size}']
+            bucket_entities = list(bucket_groups.keys())
+            doc_entity_grounding_stat = {}
+            ck = 0
+            entities_cap = args.no_of_entities if args.no_of_entities != -1 else len(bucket_entities)
+            for ek in bucket_entities:
+                if ck == entities_cap:
+                    break
+                for grp in bucket_groups[ek]:
+                    for doc in grp:
+                        if doc['doc'] not in doc_entity_grounding_stat or (doc['doc'] in doc_entity_grounding_stat and not(doc_entity_grounding_stat[doc['doc']])):
+                            print(f'\n\nGenerating groundings for filecode: {doc["doc"]}')
+                            ground_gen = GroundingsGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size)
+                            ground_gen.set_filename(filecode = doc["doc"])
+                            ground_gen.generate_groundings(skip_entity_sampling = args.skip_entity_sampling,
+                                use_bucket_entities = args.use_bucket_entities,
+                                no_of_entities = args.no_of_entities,
+                                bucket_size = args.bucket_size)
+                            doc_entity_grounding_stat[doc['doc']] = True
+                ck += 1
+        else:
+            print(f'\n\nGenerating groundings for filecode: {args.filecode}')
+            ground_gen = GroundingsGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size)
+            ground_gen.set_filename(filecode = args.filecode)
+            ground_gen.generate_groundings(skip_entity_sampling = args.skip_entity_sampling,
+                use_bucket_entities = args.use_bucket_entities,
+                no_of_entities = args.no_of_entities,
+                bucket_size = args.bucket_size)
     else:
         print('Invalid step name passed!')
         SystemExit()

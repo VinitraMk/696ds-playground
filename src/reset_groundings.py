@@ -1,7 +1,7 @@
 import json
 import os
 
-chunk_store_data_path = 'data/chunked_data/global_chunk_store/llama'
+chunk_store_data_path = 'data/chunked_data/global_chunk_store/llama/NVDA'
 chunk_store_fp = os.path.join(chunk_store_data_path, f'10-K_NVDA_20240128_chunk_store.json')
 #entities_to_retain = ['Suppliers', 'Technologies']
 entities_to_retain = []
@@ -17,6 +17,8 @@ for ci, chunk in enumerate(chunk_store["chunks"]):
         else:
             filtered_groundings = []
         chunk_store["chunks"][ci]["groundings"] = filtered_groundings
+        chunk_store["chunks"][ci]["groundings_versions"] = []
+        chunk_store["chunks"][ci]["groundings_token_count"] = 0.0
         #del chunk_store["chunks"][ci]["groundings"]
 
 with open(chunk_store_fp, 'w') as fp:

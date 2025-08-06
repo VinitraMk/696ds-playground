@@ -91,8 +91,24 @@ class Generator:
 
         return summary, summary_stats
 
-    def set_filename(self, filename: str, filecode: str):
-        self.filename = filename
+    def set_filename(self, filecode: str = "NVDA"):
+        self.filename = COMPANY_DICT[filecode]['filename']
         self.filecode = filecode
         self.company_name = COMPANY_DICT[filecode]['company_name']
+
+    def get_script_status(self):
+        script_status = {}
+        with open('./script_status.json', 'r') as fp:
+            script_status = json.load(fp)
+        return script_status
+
+    def update_script_status(self, script_status, k, v):
+        script_status[k] = v
+        with open('./script_status.json', 'w') as fp:
+            json.dump(script_status, fp)
+    
+    def reset_script_status(self):
+        with open('./script_status.json', 'w') as fp:
+            json.dump({}, fp)
+
 

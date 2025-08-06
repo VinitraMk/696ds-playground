@@ -141,7 +141,10 @@ class EntityGrouper:
                     optimal_bucket_entities = [dobj for dobj in entities_to_doc[ek]['docs'] if dobj['chunk_count'] >= 5 and dobj['chunk_count'] <= 15]
                     found = False
                     if len(optimal_bucket_entities) == bucket:
-                        doc_to_entities[bucket][ek] = optimal_bucket_entities
+                        if ek in doc_to_entities[bucket]:
+                            doc_to_entities[bucket][ek].append(optimal_bucket_entities)
+                        else:
+                            doc_to_entities[bucket][ek] = [optimal_bucket_entities]
                         found = True
                     if found:
                         break
