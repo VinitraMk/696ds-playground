@@ -3,7 +3,6 @@ from time import time
 import sys
 import json
 import os
-#from src.query_set_generation.answer_generator import AnswerGenerator
 
 # custom imports
 from src.consts.company_consts import COMPANY_DICT, COMPANIES_POOL
@@ -12,6 +11,7 @@ from src.entity_generator import EntityGenerator
 from src.entity_grouper import EntityGrouper
 from src.groundings_generator import GroundingsGenerator
 from src.query_set_generation.query_generator import QueryGenerator
+from src.query_set_generation.answer_generator import AnswerGenerator
 
 def get_script_status():
     with open('./script_status.json', 'r') as fp:
@@ -138,6 +138,22 @@ if __name__ == "__main__":
             query_gen.set_filename(args.filecode)
             query_gen.generate_query(no_of_qstns = args.no_of_qstns,
                 no_of_entities = args.no_of_entities)
+    elif args.step == "answer_gen":
+        if args.query_hop_span == "multi_doc":
+            with open(doc_groups_fp, 'r') as fp:
+                doc_groups_info = json.load(fp)
+            noe = len(doc_groups_info)
+            ans_gen = AnswerGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size,
+                query_hop_span = args.query_hop_span)
+            print(f'\n\nGenerating answers for file: {args.filecode}')
+            ans_gen.set_filename('NVDA')
+            ans_gen.generate_answer(refine_answers = False, no_of_entities = noe)
+        else:
+            ans_gen = AnswerGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size,
+                query_hop_span = args.query_hop_span)
+            print(f'\n\nGenerating answers for file: {args.filecode}')
+            ans_gen.set_filename('NVDA')
+            ans_gen.generate_answer(refine_answers = False, no_of_entities = args.no_of_entities)
     else:
         print('Invalid step name passed!')
         SystemExit()
