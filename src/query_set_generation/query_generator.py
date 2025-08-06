@@ -190,9 +190,9 @@ class QueryGenerator(Generator):
             all_resp = {}
             print('\nStarting query generation for batch of groundings\n')
             total_q = 0
-
             for ei in range(no_of_entities):
                 entity = sampled_entities[ei]
+                
                 all_resp[entity] = []
                 filtered_groundings = []
 

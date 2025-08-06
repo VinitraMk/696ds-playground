@@ -21,3 +21,23 @@ CITATION_INSTRUCTION_PROMPT = """
 
     ### Input for your task:
 """
+
+CITATION_JSON_SCHEMA = {
+    "type": "json_object",
+    "name": "citation_extraction",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "citations": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
+        "required": ["citations"],
+        "additionalProperties": False
+    }
+}
+
+CITATION_SYSTEM_PROMPT = "You are a helpful assistant, that given a chunk of text, a Q&A pair and metadata about the company addressed in the Q&A pair, extracts citations from the chunk of text that support the answer to the question."

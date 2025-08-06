@@ -12,6 +12,7 @@ from src.entity_grouper import EntityGrouper
 from src.groundings_generator import GroundingsGenerator
 from src.query_set_generation.query_generator import QueryGenerator
 from src.query_set_generation.answer_generator import AnswerGenerator
+from src.query_set_generation.citation_generator import CitationGenerator
 
 def get_script_status():
     with open('./script_status.json', 'r') as fp:
@@ -154,6 +155,20 @@ if __name__ == "__main__":
             print(f'\n\nGenerating answers for file: {args.filecode}')
             ans_gen.set_filename('NVDA')
             ans_gen.generate_answer(refine_answers = False, no_of_entities = args.no_of_entities)
+    elif args.step == "citation_gen":
+        if args.query_hop_span == "multi_doc":
+            with open(doc_groups_fp, 'r') as fp:
+                doc_groups_info = json.load(fp)
+            noe = len(doc_groups_info)
+            cit_gen = CitationGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size, query_hop_span = 'multi_doc')
+            print(f'\n\nGenerating answers for filecode: {args.filecode}')
+            cit_gen.set_filename('NVDA')
+            cit_gen.generate_citations(no_of_entities = noe)
+        else:
+            cit_gen = CitationGenerator(model_index = args.model_index, prompt_batch_size = args.prompt_batch_size, query_hop_span = 'single_doc')
+            print(f'\n\nGenerating answers for filecode: {args.filecode}')
+            cit_gen.set_filename(args.filecode)
+            cit_gen.generate_citations(no_of_entities = args.no_of_entities)
     else:
         print('Invalid step name passed!')
         SystemExit()
