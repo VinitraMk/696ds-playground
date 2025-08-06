@@ -175,16 +175,17 @@ class GroundingsGenerator(Generator):
                         evaluation_obj = extract_json_object_by_key(esummaries[bsi], "evaluation")
                         ts = evaluation_obj['entity_relevance'] + evaluation_obj['source_faithfulness'] + evaluation_obj['key_info_coverage'] + evaluation_obj['numeric_recall'] + evaluation_obj['non_redundancy']
                         grv = len(grounding_versions[ci])
-                        grounding_versions[ci][grv] = {
-                            'groundings': batch_gjson_arr[ci],
-                            'groundings_score': ts
-                        }
+                        if TSMAX[ci] < 5:
+                            grounding_versions[ci][grv] = {
+                                'groundings': batch_gjson_arr[ci],
+                                'groundings_score': ts
+                            }
                         if ts > TSMAX[ci]:
                             eval_bests[ci] = evaluation_obj
                             gbest_stats[ci] = gstats[bsi]
                             TSMAX[ci] = ts
                             gjson_arr_bests[ci] = batch_gjson_arr[ci]
-                            if ts == 5:
+                            if TSMAX[ci] == 5:
                                 all_trial_status[bsi] = 1
                     else:
                         grv = len(grounding_versions[ci])
