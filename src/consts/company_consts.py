@@ -1,123 +1,123 @@
-COMPANY_DICT =  {
+COMPANY_DICT = {
     "AAPL": {
         "filename": "10-K_AAPL_20240928",
-        "company_name": ""
+        "company_name": "Apple Inc."
     },
     "ABBV": {
         "filename": "10-K_ABBV_20231231",
-        "company_name": ""
+        "company_name": "AbbVie Inc."
     },
     "ABNB": {
         "filename": "10-K_ABNB_20231231",
-        "company_name": ""
+        "company_name": "Airbnb Inc. Class A"
     },
     "ABT": {
         "filename": "10-K_ABT_20231231",
-        "company_name": ""
+        "company_name": "Abbott Laboratories"
     },
     "ACGL": {
         "filename": "10-K_ACGL_20231231",
-        "company_name": ""
+        "company_name": "Arch Capital Group Ltd."
     },
     "ACN": {
         "filename": "10-K_ACN_20240831",
-        "company_name": ""
+        "company_name": "Accenture plc Class A Ordinary Shares (Ireland)"
     },
     "ADI": {
         "filename": "10-K_ADI_20241102",
-        "company_name": ""
+        "company_name": "Analog Devices Inc."
     },
     "ADM": {
         "filename": "10-K_ADM_20231231",
-        "company_name": ""
+        "company_name": "Archer-Daniels-Midland Company"
     },
     "ADSK": {
         "filename": "10-K_ADSK_20240131",
-        "company_name": ""
+        "company_name": "Autodesk Inc."
     },
     "AEE": {
         "filename": "10-K_AEE_20231231",
-        "company_name": ""
+        "company_name": "Ameren Corporation"
     },
     "AEP": {
         "filename": "10-K_AEP_20231231",
-        "company_name": ""
+        "company_name": "American Electric Power Company Inc."
     },
     "AES": {
         "filename": "10-K_AES_20231231",
-        "company_name": ""
+        "company_name": "The AES Corporation"
     },
     "AFL": {
         "filename": "10-K_AFL_20231231",
-        "company_name": ""
+        "company_name": "AFLAC Incorporated"
     },
     "AIG": {
         "filename": "10-K_AIG_20231231",
-        "company_name": ""
+        "company_name": "American International Group Inc. New"
     },
     "AIZ": {
         "filename": "10-K_AIZ_20231231",
-        "company_name": ""
+        "company_name": "Assurant Inc."
     },
     "AJG": {
         "filename": "10-K_AJG_20231231",
-        "company_name": ""
+        "company_name": "Arthur J. Gallagher & Co."
     },
     "AKAM": {
         "filename": "10-K_AKAM_20231231",
-        "company_name": ""
+        "company_name": "Akamai Technologies Inc."
     },
     "ALB": {
         "filename": "10-K_ALB_20231231",
-        "company_name": ""
+        "company_name": "Albemarle Corporation"
     },
     "ALGN": {
         "filename": "10-K_ALGN_20231231",
-        "company_name": ""
+        "company_name": "Align Technology Inc."
     },
     "ALLE": {
         "filename": "10-K_ALLE_20231231",
-        "company_name": ""
+        "company_name": "Allegion plc Ordinary Shares"
     },
     "ALL": {
         "filename": "10-K_ALL_20231231",
-        "company_name": ""
+        "company_name": "Allstate Corporation (The)"
     },
     "AMAT": {
         "filename": "10-K_AMAT_20241027",
-        "company_name": ""
+        "company_name": "Applied Materials Inc."
     },
     "AMCR": {
         "filename": "10-K_AMCR_20240630",
-        "company_name": ""
+        "company_name": "Amcor plc Ordinary Shares"
     },
     "AMD": {
         "filename": "10-K_AMD_20231230",
-        "company_name": "AMD Inc."
+        "company_name": "Advanced Micro Devices Inc."
     },
     "AME": {
         "filename": "10-K_AME_20231231",
-        "company_name": ""
+        "company_name": "AMETEK Inc."
     },
     "AMGN": {
         "filename": "10-K_AMGN_20231231",
-        "company_name": ""
+        "company_name": "Amgen Inc."
     },
     "AMP": {
         "filename": "10-K_AMP_20231231",
-        "company_name": ""
+        "company_name": "Ameriprise Financial Inc."
     },
     "AMT": {
         "filename": "10-K_AMT_20231231",
-        "company_name": ""
+        "company_name": "American Tower Corporation (REIT)"
     },
     "AMZN": {
         "filename": "10-K_AMZN_20231231",
-        "company_name": ""
+        "company_name": "Amazon.com Inc."
     },
     "ANET": {
         "filename": "10-K_ANET_20231231",
-        "company_name": ""
+        "company_name": "Arista Networks Inc."
     },
     "ANSS": {
         "filename": "10-K_ANSS_20231231",
@@ -125,375 +125,375 @@ COMPANY_DICT =  {
     },
     "AON": {
         "filename": "10-K_AON_20231231",
-        "company_name": ""
+        "company_name": "Aon plc Class A Ordinary Shares (Ireland)"
     },
     "AOS": {
         "filename": "10-K_AOS_20231231",
-        "company_name": ""
+        "company_name": "A.O. Smith Corporation"
     },
     "APA": {
         "filename": "10-K_APA_20231231",
-        "company_name": ""
+        "company_name": "APA Corporation"
     },
     "APD": {
         "filename": "10-K_APD_20240930",
-        "company_name": ""
+        "company_name": "Air Products and Chemicals Inc."
     },
     "APH": {
         "filename": "10-K_APH_20231231",
-        "company_name": ""
+        "company_name": "Amphenol Corporation"
     },
     "APO": {
         "filename": "10-K_APO_20231231",
-        "company_name": ""
+        "company_name": "Apollo Global Management Inc. (New)"
     },
     "APTV": {
         "filename": "10-K_APTV_20231231",
-        "company_name": ""
+        "company_name": "Aptiv PLC Ordinary Shares"
     },
     "ARE": {
         "filename": "10-K_ARE_20231231",
-        "company_name": ""
+        "company_name": "Alexandria Real Estate Equities Inc."
     },
     "ATO": {
         "filename": "10-K_ATO_20240930",
-        "company_name": ""
+        "company_name": "Atmos Energy Corporation"
     },
     "AVB": {
         "filename": "10-K_AVB_20231231",
-        "company_name": ""
+        "company_name": "AvalonBay Communities Inc."
     },
     "AVGO": {
         "filename": "10-K_AVGO_20241103",
-        "company_name": ""
+        "company_name": "Broadcom Inc."
     },
     "AVY": {
         "filename": "10-K_AVY_20231230",
-        "company_name": ""
+        "company_name": "Avery Dennison Corporation"
     },
     "AWK": {
         "filename": "10-K_AWK_20231231",
-        "company_name": ""
+        "company_name": "American Water Works Company Inc."
     },
     "AXON": {
         "filename": "10-K_AXON_20231231",
-        "company_name": ""
+        "company_name": "Axon Enterprise Inc."
     },
     "AXP": {
         "filename": "10-K_AXP_20231231",
-        "company_name": ""
+        "company_name": "American Express Company"
     },
     "AZO": {
         "filename": "10-K_AZO_20240831",
-        "company_name": ""
+        "company_name": "AutoZone Inc."
     },
     "A": {
         "filename": "10-K_A_20241031",
-        "company_name": ""
+        "company_name": "Agilent Technologies Inc."
     },
     "BAC": {
         "filename": "10-K_BAC_20231231",
-        "company_name": ""
+        "company_name": "Bank of America Corporation"
     },
     "BALL": {
         "filename": "10-K_BALL_20231231",
-        "company_name": ""
+        "company_name": "Ball Corporation"
     },
     "BAX": {
         "filename": "10-K_BAX_20231231",
-        "company_name": ""
+        "company_name": "Baxter International Inc."
     },
     "BA": {
         "filename": "10-K_BA_20231231",
-        "company_name": ""
+        "company_name": "Boeing Company (The)"
     },
     "BBY": {
         "filename": "10-K_BBY_20240203",
-        "company_name": ""
+        "company_name": "Best Buy Co. Inc."
     },
     "BDX": {
         "filename": "10-K_BDX_20240930",
-        "company_name": ""
+        "company_name": "Becton Dickinson and Company"
     },
     "BEN": {
         "filename": "10-K_BEN_20240930",
-        "company_name": ""
+        "company_name": "Franklin Resources Inc."
     },
     "BG": {
         "filename": "10-K_BG_20231231",
-        "company_name": ""
+        "company_name": "Bunge Limited Common Shares"
     },
     "BIIB": {
         "filename": "10-K_BIIB_20231231",
-        "company_name": ""
+        "company_name": "Biogen Inc."
     },
     "BKNG": {
         "filename": "10-K_BKNG_20231231",
-        "company_name": ""
+        "company_name": "Booking Holdings Inc."
     },
     "BKR": {
         "filename": "10-K_BKR_20231231",
-        "company_name": ""
+        "company_name": "Baker Hughes Company Class A"
     },
     "BK": {
         "filename": "10-K_BK_20231231",
-        "company_name": ""
+        "company_name": "The Bank of New York Mellon Corporation"
     },
     "BLDR": {
         "filename": "10-K_BLDR_20231231",
-        "company_name": ""
+        "company_name": "Builders FirstSource Inc."
     },
     "BMY": {
         "filename": "10-K_BMY_20231231",
-        "company_name": ""
+        "company_name": "Bristol-Myers Squibb Company"
     },
     "BRO": {
         "filename": "10-K_BRO_20231231",
-        "company_name": ""
+        "company_name": "Brown & Brown Inc."
     },
     "BR": {
         "filename": "10-K_BR_20240630",
-        "company_name": ""
+        "company_name": "Broadridge Financial Solutions Inc."
     },
     "BSX": {
         "filename": "10-K_BSX_20231231",
-        "company_name": ""
+        "company_name": "Boston Scientific Corporation"
     },
     "BWA": {
         "filename": "10-K_BWA_20231231",
-        "company_name": ""
+        "company_name": "BorgWarner Inc."
     },
     "BXP": {
         "filename": "10-K_BXP_20231231",
-        "company_name": ""
+        "company_name": "BXP Inc."
     },
     "CAG": {
         "filename": "10-K_CAG_20240526",
-        "company_name": ""
+        "company_name": "ConAgra Brands Inc."
     },
     "CAH": {
         "filename": "10-K_CAH_20240630",
-        "company_name": ""
+        "company_name": "Cardinal Health Inc."
     },
     "CARR": {
         "filename": "10-K_CARR_20231231",
-        "company_name": ""
+        "company_name": "Carrier Global Corporation "
     },
     "CAT": {
         "filename": "10-K_CAT_20231231",
-        "company_name": ""
+        "company_name": "Caterpillar Inc."
     },
     "CBOE": {
         "filename": "10-K_CBOE_20231231",
-        "company_name": ""
+        "company_name": "Cboe Global Markets Inc."
     },
     "CBRE": {
         "filename": "10-K_CBRE_20231231",
-        "company_name": ""
+        "company_name": "CBRE Group Inc  Class A"
     },
     "CB": {
         "filename": "10-K_CB_20231231",
-        "company_name": ""
+        "company_name": "Chubb Limited "
     },
     "CCI": {
         "filename": "10-K_CCI_20231231",
-        "company_name": ""
+        "company_name": "Crown Castle Inc."
     },
     "CDNS": {
         "filename": "10-K_CDNS_20231231",
-        "company_name": ""
+        "company_name": "Cadence Design Systems Inc."
     },
     "CDW": {
         "filename": "10-K_CDW_20231231",
-        "company_name": ""
+        "company_name": "CDW Corporation"
     },
     "CEG": {
         "filename": "10-K_CEG_20231231",
-        "company_name": ""
+        "company_name": "Constellation Energy Corporation "
     },
     "CE": {
         "filename": "10-K_CE_20231231",
-        "company_name": ""
+        "company_name": "Celanese Corporation"
     },
     "CFG": {
         "filename": "10-K_CFG_20231231",
-        "company_name": ""
+        "company_name": "Citizens Financial Group Inc."
     },
     "CF": {
         "filename": "10-K_CF_20231231",
-        "company_name": ""
+        "company_name": "CF Industries Holdings Inc."
     },
     "CHD": {
         "filename": "10-K_CHD_20231231",
-        "company_name": ""
+        "company_name": "Church & Dwight Company Inc."
     },
     "CHRW": {
         "filename": "10-K_CHRW_20231231",
-        "company_name": ""
+        "company_name": "C.H. Robinson Worldwide Inc."
     },
     "CHTR": {
         "filename": "10-K_CHTR_20231231",
-        "company_name": ""
+        "company_name": "Charter Communications Inc. Class A  New"
     },
     "CINF": {
         "filename": "10-K_CINF_20231231",
-        "company_name": ""
+        "company_name": "Cincinnati Financial Corporation"
     },
     "CI": {
         "filename": "10-K_CI_20231231",
-        "company_name": ""
+        "company_name": "The Cigna Group"
     },
     "CLX": {
         "filename": "10-K_CLX_20240630",
-        "company_name": ""
+        "company_name": "Clorox Company (The)"
     },
     "CL": {
         "filename": "10-K_CL_20231231",
-        "company_name": ""
+        "company_name": "Colgate-Palmolive Company"
     },
     "CMCSA": {
         "filename": "10-K_CMCSA_20231231",
-        "company_name": ""
+        "company_name": "Comcast Corporation Class A"
     },
     "CME": {
         "filename": "10-K_CME_20231231",
-        "company_name": ""
+        "company_name": "CME Group Inc. Class A"
     },
     "CMG": {
         "filename": "10-K_CMG_20231231",
-        "company_name": ""
+        "company_name": "Chipotle Mexican Grill Inc."
     },
     "CMI": {
         "filename": "10-K_CMI_20231231",
-        "company_name": ""
+        "company_name": "Cummins Inc."
     },
     "CMS": {
         "filename": "10-K_CMS_20231231",
-        "company_name": ""
+        "company_name": "CMS Energy Corporation"
     },
     "CNC": {
         "filename": "10-K_CNC_20231231",
-        "company_name": ""
+        "company_name": "Centene Corporation"
     },
     "CNP": {
         "filename": "10-K_CNP_20231231",
-        "company_name": ""
+        "company_name": "CenterPoint Energy Inc (Holding Co)"
     },
     "COF": {
         "filename": "10-K_COF_20231231",
-        "company_name": ""
+        "company_name": "Capital One Financial Corporation"
     },
     "COO": {
         "filename": "10-K_COO_20241031",
-        "company_name": ""
+        "company_name": "The Cooper Companies Inc."
     },
     "COP": {
         "filename": "10-K_COP_20231231",
-        "company_name": ""
+        "company_name": "ConocoPhillips"
     },
     "COR": {
         "filename": "10-K_COR_20240930",
-        "company_name": ""
+        "company_name": "Cencora Inc."
     },
     "COST": {
         "filename": "10-K_COST_20240901",
-        "company_name": ""
+        "company_name": "Costco Wholesale Corporation"
     },
     "CPAY": {
         "filename": "10-K_CPAY_20231231",
-        "company_name": ""
+        "company_name": "Corpay Inc."
     },
     "CPB": {
         "filename": "10-K_CPB_20240728",
-        "company_name": ""
+        "company_name": "The Campbell's Company"
     },
     "CPRT": {
         "filename": "10-K_CPRT_20240731",
-        "company_name": ""
+        "company_name": "Copart Inc. (DE)"
     },
     "CPT": {
         "filename": "10-K_CPT_20231231",
-        "company_name": ""
+        "company_name": "Camden Property Trust"
     },
     "CRL": {
         "filename": "10-K_CRL_20231230",
-        "company_name": ""
+        "company_name": "Charles River Laboratories International Inc."
     },
     "CRM": {
         "filename": "10-K_CRM_20240131",
-        "company_name": ""
+        "company_name": "Salesforce Inc."
     },
     "CRWD": {
         "filename": "10-K_CRWD_20240131",
-        "company_name": ""
+        "company_name": "CrowdStrike Holdings Inc. Class A"
     },
     "CSCO": {
         "filename": "10-K_CSCO_20240727",
-        "company_name": ""
+        "company_name": "Cisco Systems Inc.  (DE)"
     },
     "CSGP": {
         "filename": "10-K_CSGP_20231231",
-        "company_name": ""
+        "company_name": "CoStar Group Inc."
     },
     "CSX": {
         "filename": "10-K_CSX_20231231",
-        "company_name": ""
+        "company_name": "CSX Corporation"
     },
     "CTAS": {
         "filename": "10-K_CTAS_20240531",
-        "company_name": ""
+        "company_name": "Cintas Corporation"
     },
     "CTRA": {
         "filename": "10-K_CTRA_20231231",
-        "company_name": ""
+        "company_name": "Coterra Energy Inc."
     },
     "CTSH": {
         "filename": "10-K_CTSH_20231231",
-        "company_name": ""
+        "company_name": "Cognizant Technology Solutions Corporation Class A"
     },
     "CTVA": {
         "filename": "10-K_CTVA_20231231",
-        "company_name": ""
+        "company_name": "Corteva Inc. "
     },
     "CVS": {
         "filename": "10-K_CVS_20231231",
-        "company_name": ""
+        "company_name": "CVS Health Corporation"
     },
     "CVX": {
         "filename": "10-K_CVX_20231231",
-        "company_name": ""
+        "company_name": "Chevron Corporation"
     },
     "CZR": {
         "filename": "10-K_CZR_20231231",
-        "company_name": ""
+        "company_name": "Caesars Entertainment Inc."
     },
     "C": {
         "filename": "10-K_C_20231231",
-        "company_name": ""
+        "company_name": "Citigroup Inc."
     },
     "DAL": {
         "filename": "10-K_DAL_20231231",
-        "company_name": ""
+        "company_name": "Delta Air Lines Inc."
     },
     "DAY": {
         "filename": "10-K_DAY_20231231",
-        "company_name": ""
+        "company_name": "Dayforce Inc."
     },
     "DD": {
         "filename": "10-K_DD_20231231",
-        "company_name": ""
+        "company_name": "DuPont de Nemours Inc."
     },
     "DECK": {
         "filename": "10-K_DECK_20240331",
-        "company_name": ""
+        "company_name": "Deckers Outdoor Corporation"
     },
     "DELL": {
         "filename": "10-K_DELL_20240202",
-        "company_name": ""
+        "company_name": "Dell Technologies Inc. Class C "
     },
     "DE": {
         "filename": "10-K_DE_20241027",
-        "company_name": ""
+        "company_name": "Deere & Company"
     },
     "DFS": {
         "filename": "10-K_DFS_20231231",
@@ -501,343 +501,343 @@ COMPANY_DICT =  {
     },
     "DGX": {
         "filename": "10-K_DGX_20231231",
-        "company_name": ""
+        "company_name": "Quest Diagnostics Incorporated"
     },
     "DG": {
         "filename": "10-K_DG_20240202",
-        "company_name": ""
+        "company_name": "Dollar General Corporation"
     },
     "DHI": {
         "filename": "10-K_DHI_20240930",
-        "company_name": ""
+        "company_name": "D.R. Horton Inc."
     },
     "DHR": {
         "filename": "10-K_DHR_20231231",
-        "company_name": ""
+        "company_name": "Danaher Corporation"
     },
     "DIS": {
         "filename": "10-K_DIS_20240928",
-        "company_name": ""
+        "company_name": "Walt Disney Company (The)"
     },
     "DLR": {
         "filename": "10-K_DLR_20231231",
-        "company_name": ""
+        "company_name": "Digital Realty Trust Inc."
     },
     "DLTR": {
         "filename": "10-K_DLTR_20240203",
-        "company_name": ""
+        "company_name": "Dollar Tree Inc."
     },
     "DOC": {
         "filename": "10-K_DOC_20231231",
-        "company_name": ""
+        "company_name": "Healthpeak Properties Inc."
     },
     "DOV": {
         "filename": "10-K_DOV_20231231",
-        "company_name": ""
+        "company_name": "Dover Corporation"
     },
     "DOW": {
         "filename": "10-K_DOW_20231231",
-        "company_name": ""
+        "company_name": "Dow Inc. "
     },
     "DPZ": {
         "filename": "10-K_DPZ_20231231",
-        "company_name": ""
+        "company_name": "Domino's Pizza Inc"
     },
     "DRI": {
         "filename": "10-K_DRI_20240526",
-        "company_name": ""
+        "company_name": "Darden Restaurants Inc."
     },
     "DTE": {
         "filename": "10-K_DTE_20231231",
-        "company_name": ""
+        "company_name": "DTE Energy Company"
     },
     "DUK": {
         "filename": "10-K_DUK_20231231",
-        "company_name": ""
+        "company_name": "Duke Energy Corporation (Holding Company)"
     },
     "DVA": {
         "filename": "10-K_DVA_20231231",
-        "company_name": ""
+        "company_name": "DaVita Inc."
     },
     "DVN": {
         "filename": "10-K_DVN_20231231",
-        "company_name": ""
+        "company_name": "Devon Energy Corporation"
     },
     "DXCM": {
         "filename": "10-K_DXCM_20231231",
-        "company_name": ""
+        "company_name": "DexCom Inc."
     },
     "D": {
         "filename": "10-K_D_20231231",
-        "company_name": ""
+        "company_name": "Dominion Energy Inc."
     },
     "EA": {
         "filename": "10-K_EA_20240331",
-        "company_name": ""
+        "company_name": "Electronic Arts Inc."
     },
     "EBAY": {
         "filename": "10-K_EBAY_20231231",
-        "company_name": ""
+        "company_name": "eBay Inc."
     },
     "ECL": {
         "filename": "10-K_ECL_20231231",
-        "company_name": ""
+        "company_name": "Ecolab Inc."
     },
     "ED": {
         "filename": "10-K_ED_20231231",
-        "company_name": ""
+        "company_name": "Consolidated Edison Inc."
     },
     "EFX": {
         "filename": "10-K_EFX_20231231",
-        "company_name": ""
+        "company_name": "Equifax Inc."
     },
     "EG": {
         "filename": "10-K_EG_20231231",
-        "company_name": ""
+        "company_name": "Everest Group Ltd."
     },
     "EIX": {
         "filename": "10-K_EIX_20231231",
-        "company_name": ""
+        "company_name": "Edison International"
     },
     "ELV": {
         "filename": "10-K_ELV_20231231",
-        "company_name": ""
+        "company_name": "Elevance Health Inc."
     },
     "EL": {
         "filename": "10-K_EL_20240630",
-        "company_name": ""
+        "company_name": "Estee Lauder Companies Inc. (The)"
     },
     "EMN": {
         "filename": "10-K_EMN_20231231",
-        "company_name": ""
+        "company_name": "Eastman Chemical Company"
     },
     "EMR": {
         "filename": "10-K_EMR_20240930",
-        "company_name": ""
+        "company_name": "Emerson Electric Company"
     },
     "ENPH": {
         "filename": "10-K_ENPH_20231231",
-        "company_name": ""
+        "company_name": "Enphase Energy Inc."
     },
     "EOG": {
         "filename": "10-K_EOG_20231231",
-        "company_name": ""
+        "company_name": "EOG Resources Inc."
     },
     "EPAM": {
         "filename": "10-K_EPAM_20231231",
-        "company_name": ""
+        "company_name": "EPAM Systems Inc."
     },
     "EQIX": {
         "filename": "10-K_EQIX_20231231",
-        "company_name": ""
+        "company_name": "Equinix Inc.  REIT"
     },
     "EQR": {
         "filename": "10-K_EQR_20231231",
-        "company_name": ""
+        "company_name": "Equity Residential Common Shares of Beneficial Interest"
     },
     "EQT": {
         "filename": "10-K_EQT_20231231",
-        "company_name": ""
+        "company_name": "EQT Corporation"
     },
     "ERIE": {
         "filename": "10-K_ERIE_20231231",
-        "company_name": ""
+        "company_name": "Erie Indemnity Company Class A"
     },
     "ESS": {
         "filename": "10-K_ESS_20231231",
-        "company_name": ""
+        "company_name": "Essex Property Trust Inc."
     },
     "ES": {
         "filename": "10-K_ES_20231231",
-        "company_name": ""
+        "company_name": "Eversource Energy (D/B/A)"
     },
     "ETN": {
         "filename": "10-K_ETN_20231231",
-        "company_name": ""
+        "company_name": "Eaton Corporation PLC Ordinary Shares"
     },
     "ETR": {
         "filename": "10-K_ETR_20231231",
-        "company_name": ""
+        "company_name": "Entergy Corporation"
     },
     "EVRG": {
         "filename": "10-K_EVRG_20231231",
-        "company_name": ""
+        "company_name": "Evergy Inc."
     },
     "EW": {
         "filename": "10-K_EW_20231231",
-        "company_name": ""
+        "company_name": "Edwards Lifesciences Corporation"
     },
     "EXC": {
         "filename": "10-K_EXC_20231231",
-        "company_name": ""
+        "company_name": "Exelon Corporation"
     },
     "EXPD": {
         "filename": "10-K_EXPD_20231231",
-        "company_name": ""
+        "company_name": "Expeditors International of Washington Inc."
     },
     "EXPE": {
         "filename": "10-K_EXPE_20231231",
-        "company_name": ""
+        "company_name": "Expedia Group Inc."
     },
     "EXR": {
         "filename": "10-K_EXR_20231231",
-        "company_name": ""
+        "company_name": "Extra Space Storage Inc"
     },
     "FANG": {
         "filename": "10-K_FANG_20231231",
-        "company_name": ""
+        "company_name": "Diamondback Energy Inc."
     },
     "FAST": {
         "filename": "10-K_FAST_20231231",
-        "company_name": ""
+        "company_name": "Fastenal Company"
     },
     "FCX": {
         "filename": "10-K_FCX_20231231",
-        "company_name": ""
+        "company_name": "Freeport-McMoRan Inc."
     },
     "FDS": {
         "filename": "10-K_FDS_20240831",
-        "company_name": ""
+        "company_name": "FactSet Research Systems Inc."
     },
     "FDX": {
         "filename": "10-K_FDX_20240531",
-        "company_name": ""
+        "company_name": "FedEx Corporation"
     },
     "FE": {
         "filename": "10-K_FE_20231231",
-        "company_name": ""
+        "company_name": "FirstEnergy Corp."
     },
     "FFIV": {
         "filename": "10-K_FFIV_20240930",
-        "company_name": ""
+        "company_name": "F5 Inc."
     },
     "FICO": {
         "filename": "10-K_FICO_20240930",
-        "company_name": ""
+        "company_name": "Fair Isaac Corporation"
     },
     "FIS": {
         "filename": "10-K_FIS_20231231",
-        "company_name": ""
+        "company_name": "Fidelity National Information Services Inc."
     },
     "FI": {
         "filename": "10-K_FI_20231231",
-        "company_name": ""
+        "company_name": "Fiserv Inc."
     },
     "FMC": {
         "filename": "10-K_FMC_20231231",
-        "company_name": ""
+        "company_name": "FMC Corporation"
     },
     "FOX": {
         "filename": "10-K_FOX_20240630",
-        "company_name": ""
+        "company_name": "Fox Corporation Class B"
     },
     "FRT": {
         "filename": "10-K_FRT_20231231",
-        "company_name": ""
+        "company_name": "Federal Realty Investment Trust"
     },
     "FSLR": {
         "filename": "10-K_FSLR_20231231",
-        "company_name": ""
+        "company_name": "First Solar Inc."
     },
     "FTNT": {
         "filename": "10-K_FTNT_20231231",
-        "company_name": ""
+        "company_name": "Fortinet Inc."
     },
     "FTV": {
         "filename": "10-K_FTV_20231231",
-        "company_name": ""
+        "company_name": "Fortive Corporation "
     },
     "F": {
         "filename": "10-K_F_20231231",
-        "company_name": ""
+        "company_name": "Ford Motor Company"
     },
     "GDDY": {
         "filename": "10-K_GDDY_20231231",
-        "company_name": ""
+        "company_name": "GoDaddy Inc. Class A"
     },
     "GD": {
         "filename": "10-K_GD_20231231",
-        "company_name": ""
+        "company_name": "General Dynamics Corporation"
     },
     "GEHC": {
         "filename": "10-K_GEHC_20231231",
-        "company_name": ""
+        "company_name": "GE HealthCare Technologies Inc. "
     },
     "GEN": {
         "filename": "10-K_GEN_20240329",
-        "company_name": ""
+        "company_name": "Gen Digital Inc."
     },
     "GE": {
         "filename": "10-K_GE_20231231",
-        "company_name": ""
+        "company_name": "GE Aerospace"
     },
     "GILD": {
         "filename": "10-K_GILD_20231231",
-        "company_name": ""
+        "company_name": "Gilead Sciences Inc."
     },
     "GIS": {
         "filename": "10-K_GIS_20240526",
-        "company_name": ""
+        "company_name": "General Mills Inc."
     },
     "GLW": {
         "filename": "10-K_GLW_20231231",
-        "company_name": ""
+        "company_name": "Corning Incorporated"
     },
     "GL": {
         "filename": "10-K_GL_20231231",
-        "company_name": ""
+        "company_name": "Globe Life Inc."
     },
     "GM": {
         "filename": "10-K_GM_20231231",
-        "company_name": ""
+        "company_name": "General Motors Company"
     },
     "GNRC": {
         "filename": "10-K_GNRC_20231231",
-        "company_name": ""
+        "company_name": "Generac Holdlings Inc."
     },
     "GOOG": {
         "filename": "10-K_GOOG_20231231",
-        "company_name": ""
+        "company_name": "Alphabet Inc. Class C Capital Stock"
     },
     "GPC": {
         "filename": "10-K_GPC_20231231",
-        "company_name": ""
+        "company_name": "Genuine Parts Company"
     },
     "GPN": {
         "filename": "10-K_GPN_20231231",
-        "company_name": ""
+        "company_name": "Global Payments Inc."
     },
     "GRMN": {
         "filename": "10-K_GRMN_20231230",
-        "company_name": ""
+        "company_name": "Garmin Ltd.  (Switzerland)"
     },
     "GS": {
         "filename": "10-K_GS_20231231",
-        "company_name": ""
+        "company_name": "Goldman Sachs Group Inc. (The)"
     },
     "GWW": {
         "filename": "10-K_GWW_20231231",
-        "company_name": ""
+        "company_name": "W.W. Grainger Inc."
     },
     "HAL": {
         "filename": "10-K_HAL_20231231",
-        "company_name": ""
+        "company_name": "Halliburton Company"
     },
     "HAS": {
         "filename": "10-K_HAS_20231231",
-        "company_name": ""
+        "company_name": "Hasbro Inc."
     },
     "HBAN": {
         "filename": "10-K_HBAN_20231231",
-        "company_name": ""
+        "company_name": "Huntington Bancshares Incorporated"
     },
     "HCA": {
         "filename": "10-K_HCA_20231231",
-        "company_name": ""
+        "company_name": "HCA Healthcare Inc."
     },
     "HD": {
         "filename": "10-K_HD_20240128",
-        "company_name": ""
+        "company_name": "Home Depot Inc. (The)"
     },
     "HES": {
         "filename": "10-K_HES_20231231",
@@ -845,151 +845,151 @@ COMPANY_DICT =  {
     },
     "HIG": {
         "filename": "10-K_HIG_20231231",
-        "company_name": ""
+        "company_name": "The Hartford Insurance Group Inc."
     },
     "HII": {
         "filename": "10-K_HII_20231231",
-        "company_name": ""
+        "company_name": "Huntington Ingalls Industries Inc."
     },
     "HLT": {
         "filename": "10-K_HLT_20231231",
-        "company_name": ""
+        "company_name": "Hilton Worldwide Holdings Inc. "
     },
     "HOLX": {
         "filename": "10-K_HOLX_20240928",
-        "company_name": ""
+        "company_name": "Hologic Inc."
     },
     "HON": {
         "filename": "10-K_HON_20231231",
-        "company_name": ""
+        "company_name": "Honeywell International Inc."
     },
     "HPE": {
         "filename": "10-K_HPE_20241031",
-        "company_name": ""
+        "company_name": "Hewlett Packard Enterprise Company"
     },
     "HPQ": {
         "filename": "10-K_HPQ_20241031",
-        "company_name": ""
+        "company_name": "HP Inc."
     },
     "HRL": {
         "filename": "10-K_HRL_20241027",
-        "company_name": ""
+        "company_name": "Hormel Foods Corporation"
     },
     "HSIC": {
         "filename": "10-K_HSIC_20231230",
-        "company_name": ""
+        "company_name": "Henry Schein Inc."
     },
     "HST": {
         "filename": "10-K_HST_20231231",
-        "company_name": ""
+        "company_name": "Host Hotels & Resorts Inc."
     },
     "HSY": {
         "filename": "10-K_HSY_20231231",
-        "company_name": ""
+        "company_name": "The Hershey Company"
     },
     "HUBB": {
         "filename": "10-K_HUBB_20231231",
-        "company_name": ""
+        "company_name": "Hubbell Inc"
     },
     "HUM": {
         "filename": "10-K_HUM_20231231",
-        "company_name": ""
+        "company_name": "Humana Inc."
     },
     "HWM": {
         "filename": "10-K_HWM_20231231",
-        "company_name": ""
+        "company_name": "Howmet Aerospace Inc."
     },
     "IBM": {
         "filename": "10-K_IBM_20231231",
-        "company_name": ""
+        "company_name": "International Business Machines Corporation"
     },
     "ICE": {
         "filename": "10-K_ICE_20231231",
-        "company_name": ""
+        "company_name": "Intercontinental Exchange Inc."
     },
     "IDXX": {
         "filename": "10-K_IDXX_20231231",
-        "company_name": ""
+        "company_name": "IDEXX Laboratories Inc."
     },
     "IEX": {
         "filename": "10-K_IEX_20231231",
-        "company_name": ""
+        "company_name": "IDEX Corporation"
     },
     "IFF": {
         "filename": "10-K_IFF_20231231",
-        "company_name": ""
+        "company_name": "International Flavors & Fragrances Inc."
     },
     "INCY": {
         "filename": "10-K_INCY_20231231",
-        "company_name": ""
+        "company_name": "Incyte Corp."
     },
     "INTC": {
         "filename": "10-K_INTC_20231230",
-        "company_name": "Intel Corp."
+        "company_name": "Intel Corporation"
     },
     "INTU": {
         "filename": "10-K_INTU_20240731",
-        "company_name": ""
+        "company_name": "Intuit Inc."
     },
     "INVH": {
         "filename": "10-K_INVH_20231231",
-        "company_name": ""
+        "company_name": "Invitation Homes Inc."
     },
     "IPG": {
         "filename": "10-K_IPG_20231231",
-        "company_name": ""
+        "company_name": "Interpublic Group of Companies Inc. (The)"
     },
     "IP": {
         "filename": "10-K_IP_20231231",
-        "company_name": ""
+        "company_name": "International Paper Company"
     },
     "IQV": {
         "filename": "10-K_IQV_20231231",
-        "company_name": ""
+        "company_name": "IQVIA Holdings Inc."
     },
     "IRM": {
         "filename": "10-K_IRM_20231231",
-        "company_name": ""
+        "company_name": "Iron Mountain Incorporated (Delaware) REIT"
     },
     "IR": {
         "filename": "10-K_IR_20231231",
-        "company_name": ""
+        "company_name": "Ingersoll Rand Inc."
     },
     "ISRG": {
         "filename": "10-K_ISRG_20231231",
-        "company_name": ""
+        "company_name": "Intuitive Surgical Inc."
     },
     "ITW": {
         "filename": "10-K_ITW_20231231",
-        "company_name": ""
+        "company_name": "Illinois Tool Works Inc."
     },
     "IT": {
         "filename": "10-K_IT_20231231",
-        "company_name": ""
+        "company_name": "Gartner Inc."
     },
     "IVZ": {
         "filename": "10-K_IVZ_20231231",
-        "company_name": ""
+        "company_name": "Invesco Ltd"
     },
     "JBHT": {
         "filename": "10-K_JBHT_20231231",
-        "company_name": ""
+        "company_name": "J.B. Hunt Transport Services Inc."
     },
     "JBL": {
         "filename": "10-K_JBL_20240831",
-        "company_name": ""
+        "company_name": "Jabil Inc."
     },
     "JCI": {
         "filename": "10-K_JCI_20240930",
-        "company_name": ""
+        "company_name": "Johnson Controls International plc Ordinary Share"
     },
     "JKHY": {
         "filename": "10-K_JKHY_20240630",
-        "company_name": ""
+        "company_name": "Jack Henry & Associates Inc."
     },
     "JNJ": {
         "filename": "10-K_JNJ_20231231",
-        "company_name": ""
+        "company_name": "Johnson & Johnson"
     },
     "JNPR": {
         "filename": "10-K_JNPR_20231231",
@@ -997,395 +997,395 @@ COMPANY_DICT =  {
     },
     "JPM": {
         "filename": "10-K_JPM_20231231",
-        "company_name": ""
+        "company_name": "JP Morgan Chase & Co."
     },
     "J": {
         "filename": "10-K_J_20240927",
-        "company_name": ""
+        "company_name": "Jacobs Solutions Inc."
     },
     "KDP": {
         "filename": "10-K_KDP_20231231",
-        "company_name": ""
+        "company_name": "Keurig Dr Pepper Inc."
     },
     "KEYS": {
         "filename": "10-K_KEYS_20241031",
-        "company_name": ""
+        "company_name": "Keysight Technologies Inc."
     },
     "KEY": {
         "filename": "10-K_KEY_20231231",
-        "company_name": ""
+        "company_name": "KeyCorp"
     },
     "KHC": {
         "filename": "10-K_KHC_20231230",
-        "company_name": ""
+        "company_name": "The Kraft Heinz Company"
     },
     "KIM": {
         "filename": "10-K_KIM_20231231",
-        "company_name": ""
+        "company_name": "Kimco Realty Corporation (HC)"
     },
     "KKR": {
         "filename": "10-K_KKR_20231231",
-        "company_name": ""
+        "company_name": "KKR & Co. Inc."
     },
     "KLAC": {
         "filename": "10-K_KLAC_20240630",
-        "company_name": ""
+        "company_name": "KLA Corporation"
     },
     "KMB": {
         "filename": "10-K_KMB_20231231",
-        "company_name": ""
+        "company_name": "Kimberly-Clark Corporation"
     },
     "KMI": {
         "filename": "10-K_KMI_20231231",
-        "company_name": ""
+        "company_name": "Kinder Morgan Inc."
     },
     "KMX": {
         "filename": "10-K_KMX_20240229",
-        "company_name": ""
+        "company_name": "CarMax Inc"
     },
     "KO": {
         "filename": "10-K_KO_20231231",
-        "company_name": ""
+        "company_name": "Coca-Cola Company (The)"
     },
     "KR": {
         "filename": "10-K_KR_20240203",
-        "company_name": ""
+        "company_name": "Kroger Company (The)"
     },
     "KVUE": {
         "filename": "10-K_KVUE_20231231",
-        "company_name": ""
+        "company_name": "Kenvue Inc."
     },
     "K": {
         "filename": "10-K_K_20231230",
-        "company_name": ""
+        "company_name": "Kellanova"
     },
     "LDOS": {
         "filename": "10-K_LDOS_20231229",
-        "company_name": ""
+        "company_name": "Leidos Holdings Inc."
     },
     "LEN": {
         "filename": "10-K_LEN_20231130",
-        "company_name": ""
+        "company_name": "Lennar Corporation Class A"
     },
     "LHX": {
         "filename": "10-K_LHX_20231229",
-        "company_name": ""
+        "company_name": "L3Harris Technologies Inc."
     },
     "LH": {
         "filename": "10-K_LH_20231231",
-        "company_name": ""
+        "company_name": "Labcorp Holdings Inc."
     },
     "LII": {
         "filename": "10-K_LII_20231231",
-        "company_name": ""
+        "company_name": "Lennox International Inc."
     },
     "LIN": {
         "filename": "10-K_LIN_20231231",
-        "company_name": ""
+        "company_name": "Linde plc Ordinary Shares"
     },
     "LKQ": {
         "filename": "10-K_LKQ_20231231",
-        "company_name": ""
+        "company_name": "LKQ Corporation"
     },
     "LLY": {
         "filename": "10-K_LLY_20231231",
-        "company_name": ""
+        "company_name": "Eli Lilly and Company"
     },
     "LMT": {
         "filename": "10-K_LMT_20231231",
-        "company_name": ""
+        "company_name": "Lockheed Martin Corporation"
     },
     "LNT": {
         "filename": "10-K_LNT_20231231",
-        "company_name": ""
+        "company_name": "Alliant Energy Corporation"
     },
     "LOW": {
         "filename": "10-K_LOW_20240202",
-        "company_name": ""
+        "company_name": "Lowe's Companies Inc."
     },
     "LRCX": {
         "filename": "10-K_LRCX_20240630",
-        "company_name": ""
+        "company_name": "Lam Research Corporation"
     },
     "LULU": {
         "filename": "10-K_LULU_20240128",
-        "company_name": ""
+        "company_name": "lululemon athletica inc."
     },
     "LUV": {
         "filename": "10-K_LUV_20231231",
-        "company_name": ""
+        "company_name": "Southwest Airlines Company"
     },
     "LVS": {
         "filename": "10-K_LVS_20231231",
-        "company_name": ""
+        "company_name": "Las Vegas Sands Corp."
     },
     "LW": {
         "filename": "10-K_LW_20240526",
-        "company_name": ""
+        "company_name": "Lamb Weston Holdings Inc. "
     },
     "LYB": {
         "filename": "10-K_LYB_20231231",
-        "company_name": ""
+        "company_name": "LyondellBasell Industries NV Ordinary Shares Class A (Netherlands)"
     },
     "LYV": {
         "filename": "10-K_LYV_20231231",
-        "company_name": ""
+        "company_name": "Live Nation Entertainment Inc."
     },
     "L": {
         "filename": "10-K_L_20231231",
-        "company_name": ""
+        "company_name": "Loews Corporation"
     },
     "MAA": {
         "filename": "10-K_MAA_20231231",
-        "company_name": ""
+        "company_name": "Mid-America Apartment Communities Inc."
     },
     "MAR": {
         "filename": "10-K_MAR_20231231",
-        "company_name": ""
+        "company_name": "Marriott International Class A"
     },
     "MAS": {
         "filename": "10-K_MAS_20231231",
-        "company_name": ""
+        "company_name": "Masco Corporation"
     },
     "MA": {
         "filename": "10-K_MA_20231231",
-        "company_name": ""
+        "company_name": "Mastercard Incorporated"
     },
     "MCHP": {
         "filename": "10-K_MCHP_20240331",
-        "company_name": ""
+        "company_name": "Microchip Technology Incorporated"
     },
     "MCK": {
         "filename": "10-K_MCK_20240331",
-        "company_name": ""
+        "company_name": "McKesson Corporation"
     },
     "MCO": {
         "filename": "10-K_MCO_20231231",
-        "company_name": ""
+        "company_name": "Moody's Corporation"
     },
     "MDLZ": {
         "filename": "10-K_MDLZ_20231231",
-        "company_name": ""
+        "company_name": "Mondelez International Inc. Class A"
     },
     "MDT": {
         "filename": "10-K_MDT_20240426",
-        "company_name": ""
+        "company_name": "Medtronic plc. Ordinary Shares"
     },
     "META": {
         "filename": "10-K_META_20231231",
-        "company_name": ""
+        "company_name": "Meta Platforms Inc. Class A"
     },
     "MET": {
         "filename": "10-K_MET_20231231",
-        "company_name": ""
+        "company_name": "MetLife Inc."
     },
     "MGM": {
         "filename": "10-K_MGM_20231231",
-        "company_name": ""
+        "company_name": "MGM Resorts International"
     },
     "MHK": {
         "filename": "10-K_MHK_20231231",
-        "company_name": ""
+        "company_name": "Mohawk Industries Inc."
     },
     "MKC": {
         "filename": "10-K_MKC_20231130",
-        "company_name": ""
+        "company_name": "McCormick & Company Incorporated"
     },
     "MKTX": {
         "filename": "10-K_MKTX_20231231",
-        "company_name": ""
+        "company_name": "MarketAxess Holdings Inc."
     },
     "MLM": {
         "filename": "10-K_MLM_20231231",
-        "company_name": ""
+        "company_name": "Martin Marietta Materials Inc."
     },
     "MMC": {
         "filename": "10-K_MMC_20231231",
-        "company_name": ""
+        "company_name": "Marsh & McLennan Companies Inc."
     },
     "MMM": {
         "filename": "10-K_MMM_20231231",
-        "company_name": ""
+        "company_name": "3M Company"
     },
     "MNST": {
         "filename": "10-K_MNST_20231231",
-        "company_name": ""
+        "company_name": "Monster Beverage Corporation"
     },
     "MOH": {
         "filename": "10-K_MOH_20231231",
-        "company_name": ""
+        "company_name": "Molina Healthcare Inc"
     },
     "MOS": {
         "filename": "10-K_MOS_20231231",
-        "company_name": ""
+        "company_name": "Mosaic Company (The)"
     },
     "MO": {
         "filename": "10-K_MO_20231231",
-        "company_name": ""
+        "company_name": "Altria Group Inc."
     },
     "MPC": {
         "filename": "10-K_MPC_20231231",
-        "company_name": ""
+        "company_name": "Marathon Petroleum Corporation"
     },
     "MPWR": {
         "filename": "10-K_MPWR_20231231",
-        "company_name": ""
+        "company_name": "Monolithic Power Systems Inc."
     },
     "MRK": {
         "filename": "10-K_MRK_20231231",
-        "company_name": ""
+        "company_name": "Merck & Company Inc.  (new)"
     },
     "MRNA": {
         "filename": "10-K_MRNA_20231231",
-        "company_name": ""
+        "company_name": "Moderna Inc."
     },
     "MSCI": {
         "filename": "10-K_MSCI_20231231",
-        "company_name": ""
+        "company_name": "MSCI Inc."
     },
     "MSFT": {
         "filename": "10-K_MSFT_20240630",
-        "company_name": ""
+        "company_name": "Microsoft Corporation"
     },
     "MSI": {
         "filename": "10-K_MSI_20231231",
-        "company_name": ""
+        "company_name": "Motorola Solutions Inc."
     },
     "MS": {
         "filename": "10-K_MS_20231231",
-        "company_name": ""
+        "company_name": "Morgan Stanley"
     },
     "MTB": {
         "filename": "10-K_MTB_20231231",
-        "company_name": ""
+        "company_name": "M&T Bank Corporation"
     },
     "MTCH": {
         "filename": "10-K_MTCH_20231231",
-        "company_name": ""
+        "company_name": "Match Group Inc."
     },
     "MTD": {
         "filename": "10-K_MTD_20231231",
-        "company_name": ""
+        "company_name": "Mettler-Toledo International Inc."
     },
     "MU": {
         "filename": "10-K_MU_20240829",
-        "company_name": ""
+        "company_name": "Micron Technology Inc."
     },
     "NCLH": {
         "filename": "10-K_NCLH_20231231",
-        "company_name": ""
+        "company_name": "Norwegian Cruise Line Holdings Ltd. Ordinary Shares"
     },
     "NDAQ": {
         "filename": "10-K_NDAQ_20231231",
-        "company_name": ""
+        "company_name": "Nasdaq Inc."
     },
     "NDSN": {
         "filename": "10-K_NDSN_20241031",
-        "company_name": ""
+        "company_name": "Nordson Corporation"
     },
     "NEE": {
         "filename": "10-K_NEE_20231231",
-        "company_name": ""
+        "company_name": "NextEra Energy Inc."
     },
     "NEM": {
         "filename": "10-K_NEM_20231231",
-        "company_name": ""
+        "company_name": "Newmont Corporation"
     },
     "NFLX": {
         "filename": "10-K_NFLX_20231231",
-        "company_name": ""
+        "company_name": "Netflix Inc."
     },
     "NI": {
         "filename": "10-K_NI_20231231",
-        "company_name": ""
+        "company_name": "NiSource Inc"
     },
     "NKE": {
         "filename": "10-K_NKE_20240531",
-        "company_name": ""
+        "company_name": "Nike Inc."
     },
     "NOC": {
         "filename": "10-K_NOC_20231231",
-        "company_name": ""
+        "company_name": "Northrop Grumman Corporation"
     },
     "NOW": {
         "filename": "10-K_NOW_20231231",
-        "company_name": ""
+        "company_name": "ServiceNow Inc."
     },
     "NRG": {
         "filename": "10-K_NRG_20231231",
-        "company_name": ""
+        "company_name": "NRG Energy Inc."
     },
     "NSC": {
         "filename": "10-K_NSC_20231231",
-        "company_name": ""
+        "company_name": "Norfolk Southern Corporation"
     },
     "NTAP": {
         "filename": "10-K_NTAP_20240426",
-        "company_name": ""
+        "company_name": "NetApp Inc."
     },
     "NTRS": {
         "filename": "10-K_NTRS_20231231",
-        "company_name": ""
+        "company_name": "Northern Trust Corporation"
     },
     "NUE": {
         "filename": "10-K_NUE_20231231",
-        "company_name": ""
+        "company_name": "Nucor Corporation"
     },
     "NVDA": {
         "filename": "10-K_NVDA_20240128",
-        "company_name": "Nvidia"
+        "company_name": "NVIDIA Corporation"
     },
     "NVR": {
         "filename": "10-K_NVR_20231231",
-        "company_name": ""
+        "company_name": "NVR Inc."
     },
     "NWS": {
         "filename": "10-K_NWS_20240630",
-        "company_name": ""
+        "company_name": "News Corporation Class B"
     },
     "NXPI": {
         "filename": "10-K_NXPI_20231231",
-        "company_name": ""
+        "company_name": "NXP Semiconductors N.V."
     },
     "ODFL": {
         "filename": "10-K_ODFL_20231231",
-        "company_name": ""
+        "company_name": "Old Dominion Freight Line Inc."
     },
     "OKE": {
         "filename": "10-K_OKE_20231231",
-        "company_name": ""
+        "company_name": "ONEOK Inc."
     },
     "OMC": {
         "filename": "10-K_OMC_20231231",
-        "company_name": ""
+        "company_name": "Omnicom Group Inc."
     },
     "ON": {
         "filename": "10-K_ON_20231231",
-        "company_name": ""
+        "company_name": "ON Semiconductor Corporation"
     },
     "ORCL": {
         "filename": "10-K_ORCL_20240531",
-        "company_name": ""
+        "company_name": "Oracle Corporation"
     },
     "ORLY": {
         "filename": "10-K_ORLY_20231231",
-        "company_name": ""
+        "company_name": "O'Reilly Automotive Inc."
     },
     "OTIS": {
         "filename": "10-K_OTIS_20231231",
-        "company_name": ""
+        "company_name": "Otis Worldwide Corporation "
     },
     "OXY": {
         "filename": "10-K_OXY_20231231",
-        "company_name": ""
+        "company_name": "Occidental Petroleum Corporation"
     },
     "O": {
         "filename": "10-K_O_20231231",
-        "company_name": ""
+        "company_name": "Realty Income Corporation"
     },
     "PANW": {
         "filename": "10-K_PANW_20240731",
-        "company_name": ""
+        "company_name": "Palo Alto Networks Inc."
     },
     "PARA": {
         "filename": "10-K_PARA_20231231",
@@ -1393,557 +1393,558 @@ COMPANY_DICT =  {
     },
     "PAYC": {
         "filename": "10-K_PAYC_20231231",
-        "company_name": ""
+        "company_name": "Paycom Software Inc."
     },
     "PAYX": {
         "filename": "10-K_PAYX_20240531",
-        "company_name": ""
+        "company_name": "Paychex Inc."
     },
     "PCAR": {
         "filename": "10-K_PCAR_20231231",
-        "company_name": ""
+        "company_name": "PACCAR Inc."
     },
     "PCG": {
         "filename": "10-K_PCG_20231231",
-        "company_name": ""
+        "company_name": "Pacific Gas & Electric Co."
     },
     "PEG": {
         "filename": "10-K_PEG_20231231",
-        "company_name": ""
+        "company_name": "Public Service Enterprise Group Incorporated"
     },
     "PEP": {
         "filename": "10-K_PEP_20231230",
-        "company_name": ""
+        "company_name": "PepsiCo Inc."
     },
     "PFE": {
         "filename": "10-K_PFE_20231231",
-        "company_name": ""
+        "company_name": "Pfizer Inc."
     },
     "PFG": {
         "filename": "10-K_PFG_20231231",
-        "company_name": ""
+        "company_name": "Principal Financial Group Inc"
     },
     "PGR": {
         "filename": "10-K_PGR_20231231",
-        "company_name": ""
+        "company_name": "Progressive Corporation (The)"
     },
     "PG": {
         "filename": "10-K_PG_20240630",
-        "company_name": ""
+        "company_name": "Procter & Gamble Company (The)"
     },
     "PHM": {
         "filename": "10-K_PHM_20231231",
-        "company_name": ""
+        "company_name": "PulteGroup Inc."
     },
     "PH": {
         "filename": "10-K_PH_20240630",
-        "company_name": ""
+        "company_name": "Parker-Hannifin Corporation"
     },
     "PKG": {
         "filename": "10-K_PKG_20231231",
-        "company_name": ""
+        "company_name": "Packaging Corporation of America"
     },
     "PLD": {
         "filename": "10-K_PLD_20231231",
-        "company_name": ""
+        "company_name": "Prologis Inc."
     },
     "PLTR": {
         "filename": "10-K_PLTR_20231231",
-        "company_name": ""
+        "company_name": "Palantir Technologies Inc. Class A"
     },
     "PM": {
         "filename": "10-K_PM_20231231",
-        "company_name": ""
+        "company_name": "Philip Morris International Inc"
     },
     "PNC": {
         "filename": "10-K_PNC_20231231",
-        "company_name": ""
+        "company_name": "PNC Financial Services Group Inc. (The)"
     },
     "PNR": {
         "filename": "10-K_PNR_20231231",
-        "company_name": ""
+        "company_name": "Pentair plc. Ordinary Share"
     },
     "PNW": {
         "filename": "10-K_PNW_20231231",
-        "company_name": ""
+        "company_name": "Pinnacle West Capital Corporation"
     },
     "PODD": {
         "filename": "10-K_PODD_20231231",
-        "company_name": ""
+        "company_name": "Insulet Corporation"
     },
     "POOL": {
         "filename": "10-K_POOL_20231231",
-        "company_name": ""
+        "company_name": "Pool Corporation"
     },
     "PPG": {
         "filename": "10-K_PPG_20231231",
-        "company_name": ""
+        "company_name": "PPG Industries Inc."
     },
     "PPL": {
         "filename": "10-K_PPL_20231231",
-        "company_name": ""
+        "company_name": "PPL Corporation"
     },
     "PRU": {
         "filename": "10-K_PRU_20231231",
-        "company_name": ""
+        "company_name": "Prudential Financial Inc."
     },
     "PSA": {
         "filename": "10-K_PSA_20231231",
-        "company_name": ""
+        "company_name": "Public Storage"
     },
     "PSX": {
         "filename": "10-K_PSX_20231231",
-        "company_name": ""
+        "company_name": "Phillips 66"
     },
     "PTC": {
         "filename": "10-K_PTC_20240930",
-        "company_name": ""
+        "company_name": "PTC Inc."
     },
     "PWR": {
         "filename": "10-K_PWR_20231231",
-        "company_name": ""
+        "company_name": "Quanta Services Inc."
     },
     "PYPL": {
         "filename": "10-K_PYPL_20231231",
-        "company_name": ""
+        "company_name": "PayPal Holdings Inc."
     },
     "QCOM": {
         "filename": "10-K_QCOM_20240929",
-        "company_name": ""
+        "company_name": "QUALCOMM Incorporated"
     },
     "RCL": {
         "filename": "10-K_RCL_20231231",
-        "company_name": ""
+        "company_name": "Royal Caribbean Cruises Ltd."
     },
     "REGN": {
         "filename": "10-K_REGN_20231231",
-        "company_name": ""
+        "company_name": "Regeneron Pharmaceuticals Inc."
     },
     "REG": {
         "filename": "10-K_REG_20231231",
-        "company_name": ""
+        "company_name": "Regency Centers Corporation"
     },
     "RF": {
         "filename": "10-K_RF_20231231",
-        "company_name": ""
+        "company_name": "Regions Financial Corporation"
     },
     "RJF": {
         "filename": "10-K_RJF_20240930",
-        "company_name": ""
+        "company_name": "Raymond James Financial Inc."
     },
     "RL": {
         "filename": "10-K_RL_20240330",
-        "company_name": ""
+        "company_name": "Ralph Lauren Corporation"
     },
     "RMD": {
         "filename": "10-K_RMD_20240630",
-        "company_name": ""
+        "company_name": "ResMed Inc."
     },
     "ROK": {
         "filename": "10-K_ROK_20240930",
-        "company_name": ""
+        "company_name": "Rockwell Automation Inc."
     },
     "ROL": {
         "filename": "10-K_ROL_20231231",
-        "company_name": ""
+        "company_name": "Rollins Inc."
     },
     "ROP": {
         "filename": "10-K_ROP_20231231",
-        "company_name": ""
+        "company_name": "Roper Technologies Inc."
     },
     "ROST": {
         "filename": "10-K_ROST_20240203",
-        "company_name": ""
+        "company_name": "Ross Stores Inc."
     },
     "RSG": {
         "filename": "10-K_RSG_20231231",
-        "company_name": ""
+        "company_name": "Republic Services Inc."
     },
     "RTX": {
         "filename": "10-K_RTX_20231231",
-        "company_name": ""
+        "company_name": "RTX Corporation"
     },
     "RVTY": {
         "filename": "10-K_RVTY_20231231",
-        "company_name": ""
+        "company_name": "Revvity Inc."
     },
     "SBAC": {
         "filename": "10-K_SBAC_20231231",
-        "company_name": ""
+        "company_name": "SBA Communications Corporation Class A"
     },
     "SBUX": {
         "filename": "10-K_SBUX_20240929",
-        "company_name": ""
+        "company_name": "Starbucks Corporation"
     },
     "SCHW": {
         "filename": "10-K_SCHW_20231231",
-        "company_name": ""
+        "company_name": "Charles Schwab Corporation (The)"
     },
     "SHW": {
         "filename": "10-K_SHW_20231231",
-        "company_name": ""
+        "company_name": "Sherwin-Williams Company (The)"
     },
     "SJM": {
         "filename": "10-K_SJM_20240430",
-        "company_name": ""
+        "company_name": "The J.M. Smucker Company"
     },
     "SLB": {
         "filename": "10-K_SLB_20231231",
-        "company_name": ""
+        "company_name": "Schlumberger N.V."
     },
     "SNA": {
         "filename": "10-K_SNA_20231230",
-        "company_name": ""
+        "company_name": "Snap-On Incorporated"
     },
     "SNPS": {
         "filename": "10-K_SNPS_20241031",
-        "company_name": ""
+        "company_name": "Synopsys Inc."
     },
     "SO": {
         "filename": "10-K_SO_20231231",
-        "company_name": ""
+        "company_name": "Southern Company (The)"
     },
     "SPGI": {
         "filename": "10-K_SPGI_20231231",
-        "company_name": ""
+        "company_name": "S&P Global Inc."
     },
     "SRE": {
         "filename": "10-K_SRE_20231231",
-        "company_name": ""
+        "company_name": "DBA Sempra"
     },
     "STE": {
         "filename": "10-K_STE_20240331",
-        "company_name": ""
+        "company_name": "STERIS plc (Ireland) Ordinary Shares"
     },
     "STLD": {
         "filename": "10-K_STLD_20231231",
-        "company_name": ""
+        "company_name": "Steel Dynamics Inc."
     },
     "STT": {
         "filename": "10-K_STT_20231231",
-        "company_name": ""
+        "company_name": "State Street Corporation"
     },
     "STX": {
         "filename": "10-K_STX_20240628",
-        "company_name": ""
+        "company_name": "Seagate Technology Holdings PLC Ordinary Shares (Ireland)"
     },
     "STZ": {
         "filename": "10-K_STZ_20240229",
-        "company_name": ""
+        "company_name": "Constellation Brands Inc."
     },
     "SWKS": {
         "filename": "10-K_SWKS_20240927",
-        "company_name": ""
+        "company_name": "Skyworks Solutions Inc."
     },
     "SWK": {
         "filename": "10-K_SWK_20231230",
-        "company_name": ""
+        "company_name": "Stanley Black & Decker Inc."
     },
     "SYF": {
         "filename": "10-K_SYF_20231231",
-        "company_name": ""
+        "company_name": "Synchrony Financial"
     },
     "SYK": {
         "filename": "10-K_SYK_20231231",
-        "company_name": ""
+        "company_name": "Stryker Corporation"
     },
     "SYY": {
         "filename": "10-K_SYY_20240629",
-        "company_name": ""
+        "company_name": "Sysco Corporation"
     },
     "TAP": {
         "filename": "10-K_TAP_20231231",
-        "company_name": ""
+        "company_name": "Molson Coors Beverage Company Class B"
     },
     "TDG": {
         "filename": "10-K_TDG_20240930",
-        "company_name": ""
+        "company_name": "Transdigm Group Incorporated"
     },
     "TDY": {
         "filename": "10-K_TDY_20231231",
-        "company_name": ""
+        "company_name": "Teledyne Technologies Incorporated"
     },
     "TECH": {
         "filename": "10-K_TECH_20240630",
-        "company_name": ""
+        "company_name": "Bio-Techne Corp"
     },
     "TEL": {
         "filename": "10-K_TEL_20240927",
-        "company_name": ""
+        "company_name": "TE Connectivity plc Ordinary Shares"
     },
     "TER": {
         "filename": "10-K_TER_20231231",
-        "company_name": ""
+        "company_name": "Teradyne Inc."
     },
     "TFC": {
         "filename": "10-K_TFC_20231231",
-        "company_name": ""
+        "company_name": "Truist Financial Corporation"
     },
     "TFX": {
         "filename": "10-K_TFX_20231231",
-        "company_name": ""
+        "company_name": "Teleflex Incorporated"
     },
     "TGT": {
         "filename": "10-K_TGT_20240203",
-        "company_name": ""
+        "company_name": "Target Corporation"
     },
     "TJX": {
         "filename": "10-K_TJX_20240203",
-        "company_name": ""
+        "company_name": "TJX Companies Inc. (The)"
     },
     "TMO": {
         "filename": "10-K_TMO_20231231",
-        "company_name": ""
+        "company_name": "Thermo Fisher Scientific Inc"
     },
     "TMUS": {
         "filename": "10-K_TMUS_20231231",
-        "company_name": ""
+        "company_name": "T-Mobile US Inc."
     },
     "TPL": {
         "filename": "10-K_TPL_20231231",
-        "company_name": ""
+        "company_name": "Texas Pacific Land Corporation"
     },
     "TPR": {
         "filename": "10-K_TPR_20240629",
-        "company_name": ""
+        "company_name": "Tapestry Inc."
     },
     "TRGP": {
         "filename": "10-K_TRGP_20231231",
-        "company_name": ""
+        "company_name": "Targa Resources Inc."
     },
     "TRMB": {
         "filename": "10-K_TRMB_20231229",
-        "company_name": ""
+        "company_name": "Trimble Inc."
     },
     "TROW": {
         "filename": "10-K_TROW_20231231",
-        "company_name": ""
+        "company_name": "T. Rowe Price Group Inc."
     },
     "TRV": {
         "filename": "10-K_TRV_20231231",
-        "company_name": ""
+        "company_name": "The Travelers Companies Inc."
     },
     "TSCO": {
         "filename": "10-K_TSCO_20231230",
-        "company_name": ""
+        "company_name": "Tractor Supply Company"
     },
     "TSLA": {
         "filename": "10-K_TSLA_20231231",
-        "company_name": ""
+        "company_name": "Tesla Inc."
     },
     "TSN": {
         "filename": "10-K_TSN_20240928",
-        "company_name": ""
+        "company_name": "Tyson Foods Inc."
     },
     "TTWO": {
         "filename": "10-K_TTWO_20240331",
-        "company_name": ""
+        "company_name": "Take-Two Interactive Software Inc."
     },
     "TT": {
         "filename": "10-K_TT_20231231",
-        "company_name": ""
+        "company_name": "Trane Technologies plc"
     },
     "TXN": {
         "filename": "10-K_TXN_20231231",
-        "company_name": ""
+        "company_name": "Texas Instruments Incorporated"
     },
     "TXT": {
         "filename": "10-K_TXT_20231230",
-        "company_name": ""
+        "company_name": "Textron Inc."
     },
     "TYL": {
         "filename": "10-K_TYL_20231231",
-        "company_name": ""
+        "company_name": "Tyler Technologies Inc."
     },
     "T": {
         "filename": "10-K_T_20231231",
-        "company_name": ""
+        "company_name": "AT&T Inc."
     },
     "UAL": {
         "filename": "10-K_UAL_20231231",
-        "company_name": ""
+        "company_name": "United Airlines Holdings Inc."
     },
     "UBER": {
         "filename": "10-K_UBER_20231231",
-        "company_name": ""
+        "company_name": "Uber Technologies Inc."
     },
     "UDR": {
         "filename": "10-K_UDR_20231231",
-        "company_name": ""
+        "company_name": "UDR Inc."
     },
     "UHS": {
         "filename": "10-K_UHS_20231231",
-        "company_name": ""
+        "company_name": "Universal Health Services Inc."
     },
     "ULTA": {
         "filename": "10-K_ULTA_20240203",
-        "company_name": ""
+        "company_name": "Ulta Beauty Inc."
     },
     "UNH": {
         "filename": "10-K_UNH_20231231",
-        "company_name": ""
+        "company_name": "UnitedHealth Group Incorporated  (DE)"
     },
     "UNP": {
         "filename": "10-K_UNP_20231231",
-        "company_name": ""
+        "company_name": "Union Pacific Corporation"
     },
     "UPS": {
         "filename": "10-K_UPS_20231231",
-        "company_name": ""
+        "company_name": "United Parcel Service Inc."
     },
     "URI": {
         "filename": "10-K_URI_20231231",
-        "company_name": ""
+        "company_name": "United Rentals Inc."
     },
     "USB": {
         "filename": "10-K_USB_20231231",
-        "company_name": ""
+        "company_name": "U.S. Bancorp"
     },
     "VICI": {
         "filename": "10-K_VICI_20231231",
-        "company_name": ""
+        "company_name": "VICI Properties Inc."
     },
     "VLO": {
         "filename": "10-K_VLO_20231231",
-        "company_name": ""
+        "company_name": "Valero Energy Corporation"
     },
     "VLTO": {
         "filename": "10-K_VLTO_20231231",
-        "company_name": ""
+        "company_name": "Veralto Corp "
     },
     "VMC": {
         "filename": "10-K_VMC_20231231",
-        "company_name": ""
+        "company_name": "Vulcan Materials Company (Holding Company)"
     },
     "VRSK": {
         "filename": "10-K_VRSK_20231231",
-        "company_name": ""
+        "company_name": "Verisk Analytics Inc."
     },
     "VRSN": {
         "filename": "10-K_VRSN_20231231",
-        "company_name": ""
+        "company_name": "VeriSign Inc."
     },
     "VRTX": {
         "filename": "10-K_VRTX_20231231",
-        "company_name": ""
+        "company_name": "Vertex Pharmaceuticals Incorporated"
     },
     "VST": {
         "filename": "10-K_VST_20231231",
-        "company_name": ""
+        "company_name": "Vistra Corp."
     },
     "VTRS": {
         "filename": "10-K_VTRS_20231231",
-        "company_name": ""
+        "company_name": "Viatris Inc."
     },
     "VTR": {
         "filename": "10-K_VTR_20231231",
-        "company_name": ""
+        "company_name": "Ventas Inc."
     },
     "VZ": {
         "filename": "10-K_VZ_20231231",
-        "company_name": ""
+        "company_name": "Verizon Communications Inc."
     },
     "V": {
         "filename": "10-K_V_20240930",
-        "company_name": ""
+        "company_name": "Visa Inc."
     },
     "WAB": {
         "filename": "10-K_WAB_20231231",
-        "company_name": ""
+        "company_name": "Westinghouse Air Brake Technologies Corporation"
     },
     "WAT": {
         "filename": "10-K_WAT_20231231",
-        "company_name": ""
+        "company_name": "Waters Corporation"
     },
     "WBA": {
         "filename": "10-K_WBA_20240831",
-        "company_name": ""
+        "company_name": "Walgreens Boots Alliance Inc."
     },
     "WBD": {
         "filename": "10-K_WBD_20231231",
-        "company_name": ""
+        "company_name": "Warner Bros. Discovery Inc. Series A "
     },
     "WDAY": {
         "filename": "10-K_WDAY_20240131",
-        "company_name": ""
+        "company_name": "Workday Inc. Class A"
     },
     "WDC": {
         "filename": "10-K_WDC_20240628",
-        "company_name": ""
+        "company_name": "Western Digital Corporation"
     },
     "WEC": {
         "filename": "10-K_WEC_20231231",
-        "company_name": ""
+        "company_name": "WEC Energy Group Inc."
     },
     "WELL": {
         "filename": "10-K_WELL_20231231",
-        "company_name": ""
+        "company_name": "Welltower Inc."
     },
     "WFC": {
         "filename": "10-K_WFC_20231231",
-        "company_name": ""
+        "company_name": "Wells Fargo & Company"
     },
     "WMB": {
         "filename": "10-K_WMB_20231231",
-        "company_name": ""
+        "company_name": "Williams Companies Inc. (The)"
     },
     "WMT": {
         "filename": "10-K_WMT_20240131",
-        "company_name": ""
+        "company_name": "Walmart Inc."
     },
     "WM": {
         "filename": "10-K_WM_20231231",
-        "company_name": ""
+        "company_name": "Waste Management Inc."
     },
     "WRB": {
         "filename": "10-K_WRB_20231231",
-        "company_name": ""
+        "company_name": "W.R. Berkley Corporation"
     },
     "WST": {
         "filename": "10-K_WST_20231231",
-        "company_name": ""
+        "company_name": "West Pharmaceutical Services Inc."
     },
     "WTW": {
         "filename": "10-K_WTW_20231231",
-        "company_name": ""
+        "company_name": "Willis Towers Watson Public Limited Company Ordinary Shares"
     },
     "WYNN": {
         "filename": "10-K_WYNN_20231231",
-        "company_name": ""
+        "company_name": "Wynn Resorts Limited"
     },
     "WY": {
         "filename": "10-K_WY_20231231",
-        "company_name": ""
+        "company_name": "Weyerhaeuser Company"
     },
     "XEL": {
         "filename": "10-K_XEL_20231231",
-        "company_name": ""
+        "company_name": "Xcel Energy Inc."
     },
     "XOM": {
         "filename": "10-K_XOM_20231231",
-        "company_name": ""
+        "company_name": "Exxon Mobil Corporation"
     },
     "XYL": {
         "filename": "10-K_XYL_20231231",
-        "company_name": ""
+        "company_name": "Xylem Inc.  New"
     },
     "YUM": {
         "filename": "10-K_YUM_20231231",
-        "company_name": ""
+        "company_name": "Yum! Brands Inc."
     },
     "ZBH": {
         "filename": "10-K_ZBH_20231231",
-        "company_name": ""
+        "company_name": "Zimmer Biomet Holdings Inc."
     },
     "ZBRA": {
         "filename": "10-K_ZBRA_20231231",
-        "company_name": ""
+        "company_name": "Zebra Technologies Corporation Class A"
     },
     "ZTS": {
         "filename": "10-K_ZTS_20231231",
-        "company_name": ""
+        "company_name": "Zoetis Inc. Class A"
     }
-}
+} 
 
+COMPANIES_POOL = ["NVDA", "AMD", "INTC", "F", "GM", "TSLA", "EXPE", "ELV", "PLTR", "LW", "ITW", "AME", "AMAT", "VTRS", "MTB", "EIX", "MSCI", "KR", "LUV", "EMR", "CME", "FI", "ENPH", "LRCX", "AXP", "CVS", "BAX", "COST", "PPG", "TPL", "ESS", "MRK", "EPAM", "PLD", "VMC", "C", "ANET", "TEL", "EMN", "KIM", "TDG", "MDT", "DPZ", "AWK", "ON", "FAST", "NOW", "ZBRA", "WMB", "CPT"]
 #COMPANIES_POOL = ['NVDA', 'INTC', 'AMD', 'TSLA', 'F', 'GM']
-COMPANIES_POOL = ['NVDA', 'INTC', 'AMD']
+#COMPANIES_POOL = ['NVDA', 'INTC', 'AMD']

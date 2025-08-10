@@ -5,10 +5,21 @@ import json
 import os
 import matplotlib.pyplot as plt
 from typing import List
+import itertools
 
 #custom imports
 from src.consts.company_consts import COMPANY_DICT, COMPANIES_POOL
 from src.consts.consts import MODELS
+
+def get_combinations(elements, sizes):
+    """
+    Generate combinations of given sizes from elements.
+    :param elements: list of items
+    :param sizes: list of integers for combination lengths
+    :return: generator of tuples
+    """
+    for size in sizes:
+        yield from itertools.combinations(elements, size)
 
 class EntityGrouper:
 
@@ -100,8 +111,9 @@ class EntityGrouper:
             all_entities.extend(list(entities_info.keys()))
 
         all_entities = list(set(all_entities))
+        entities_to_doc_chunk = {}
         for ek in all_entities:
-            entities_to_doc[ek] = { 'count': 0, 'docs': [] }
+            entities_to_doc[ek] = { 'count': 0, 'docs': [], 'good_chunks_count': 0 }
             for cp in companies_pool:
                 if ek in all_comp_entity_keys[cp]:
                     data_path = os.path.join(data_folder_path, f'{cp}/{COMPANY_DICT[cp]["filename"]}_entities_info.json')
@@ -112,12 +124,40 @@ class EntityGrouper:
                     entities_to_doc[ek]['docs'].append({
                         'doc': cp,
                         'chunk_count': entities_info[ek]['count'],
-                        'chunk_indices': entities_info[ek]['chunk_indices']
+                        'chunk_indices': entities_info[ek]['chunk_indices'],
+                        'groundings_generated': False
                     })
-                    
+
+        '''
+        for bs in range(1, len(companies_pool)+1):
+            for ek in all_entities:
+                if all_entities[ek]['count'] == bs:
+                    for cp in companies_pool:
+                        if ek in all_comp_entity_keys[cp]:
+                            data_path = os.path.join(data_folder_path, f'{cp}/{COMPANY_DICT[cp]["filename"]}_entities_info.json')
+                            with open(data_path, 'r') as fp:
+                                entities_info = json.load(fp)
+                            entities_to_doc[ek]['good_chunks_count'] += (entities_info[ek]['count'] >= 5 and entities_info[ek] <= 15)
+        '''            
 
         doc_hist = [0] * len(companies_pool)
         entity_doc_vals = list(map(lambda x: x['count'], list(entities_to_doc.values())))
+        for c in range(len(companies_pool)):
+            co = entity_doc_vals.count(c+1)
+            doc_hist[c] = co
+        print('doc hist keys', doc_hist)
+        plt.bar(doc_buckets, doc_hist[1:10])
+        plt.xticks(doc_buckets)
+        print('Document bar plot values: ', doc_hist)
+        plt.xlabel('No of doc buckets')
+        plt.ylabel('No of entities in doc buckets')
+        plt.title('Entities to doc count (without hop filter)')
+        plt.savefig('data/plots/entities_to_doc_hist.png')
+        plt.clf()
+
+        '''
+        doc_hist = [0] * len(companies_pool)
+        entity_doc_vals = list(map(lambda x: x['good_chunks_count'], list(entities_to_doc.values())))
         for c in range(len(companies_pool)):
             co = entity_doc_vals.count(c+1)
             doc_hist[c] = co
@@ -127,8 +167,10 @@ class EntityGrouper:
         print('Document bar plot values: ', doc_hist)
         plt.xlabel('No of doc buckets')
         plt.ylabel('No of entities in doc buckets')
-        plt.title('Entities to doc count')
+        plt.title('Entities to doc count (without hop filter)')
         plt.savefig('data/plots/entities_to_doc_hist.png')
+        plt.clf()
+        '''
 
         doc_to_entities = {}
         
@@ -137,10 +179,11 @@ class EntityGrouper:
                 if bucket not in doc_to_entities:
                     doc_to_entities[bucket] = {}
                 if ek in entities_to_doc and entities_to_doc[ek]['count'] == bucket:
-                    print('entities: ', ek, entities_to_doc[ek])
-                    optimal_bucket_entities = [dobj for dobj in entities_to_doc[ek]['docs'] if dobj['chunk_count'] >= 5 and dobj['chunk_count'] <= 15]
+                    #print('entities: ', ek, entities_to_doc[ek])
+                    optimal_bucket_entities = [dobj for dobj in entities_to_doc[ek]['docs']]
+                    optimal_count = list(map(lambda x: x['chunk_count'], optimal_bucket_entities))
                     found = False
-                    if len(optimal_bucket_entities) == bucket:
+                    if len(optimal_bucket_entities) == bucket and sum(optimal_count) >= 5 and sum(optimal_count) <= 20:
                         if ek in doc_to_entities[bucket]:
                             doc_to_entities[bucket][ek].append(optimal_bucket_entities)
                         else:

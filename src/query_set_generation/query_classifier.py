@@ -65,7 +65,8 @@ class QueryClassifier(Generator):
             #metadata = f'Company: {self.company_name} | SEC Filing: 10-K'
             #print('\nStarting answer generation for batch of questions\n')
             sampled_entities = list(query_arr.keys())
-            for ei in range(no_of_entities):
+            noe = min(no_of_entities, len(sampled_entities))
+            for ei in range(noe):
                 entity = sampled_entities[ei]
                 filtered_queries = query_arr[entity]
                 noq = len(filtered_queries)

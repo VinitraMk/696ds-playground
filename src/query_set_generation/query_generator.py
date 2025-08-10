@@ -140,7 +140,7 @@ class QueryGenerator(Generator):
             metadata = f'Input source: SEC 10-K Filings | Companies addressed in the groundings: {",".join(list(map(lambda x: COMPANY_DICT[x]["company_name"], docs_considered)))}'
             query_strs = self.__generate_queries_in_single_prompt(groundings_str, metadata, entity)
             groundings_token_count = sum(map(lambda x: x['average_output_tokens'], groundings_subarr))
-            all_resp[entity].extend([{'query': query_str, 'query_hop_span': self.query_hop_span, 'docs_considered': docs_considered, 'groundings': groundings_subarr, 'chunks_used': chunks_used, 'intended_query_type': [QUERY_INDEX[qi]], 'groundings_token_count': groundings_token_count } for qi, query_str in enumerate(query_strs)])
+            all_resp[entity].extend([{'query': query_str, 'query_hop_span': self.query_hop_span, 'docs_considered': docs_considered, 'groundings': groundings_subarr, 'chunks_used': chunks_used, 'intended_query_type': [QUERY_INDEX[qi]], 'groundings_token_count': groundings_token_count } for qi, query_str in enumerate(query_strs) if query_str != ""])
             print(f'No of queries formed using entity {entity}: ', len(all_resp[entity]))
             
         return all_resp

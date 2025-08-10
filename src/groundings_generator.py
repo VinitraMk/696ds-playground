@@ -10,7 +10,7 @@ import random
 from utils.string_utils import extract_json_array_by_key, is_valid_sentence, extract_json_text_by_key, extract_json_object_by_key
 from src.prompts.grounding_generation.grounding_prompts import GROUNDING_INSTRUCTION_PROMPT, GROUNDING_EVALUATION_PROMPT, GROUNDING_REFINEMENT_PROMPT, GROUNDING_SYSTEM_PROMPT, GROUNDING_REFINEMENT_SYSTEM_PROMPT, GROUNDING_EVAL_SYSTEM_PROMPT, GROUNDING_JSON_SCHEMA, GROUNDING_EVAL_JSON_SCHEMA
 from src.consts.company_consts import COMPANY_DICT
-from src.consts.consts import MODELS, NO_OF_TRIALS
+from src.consts.consts import MODELS, NO_OF_TRIALS, IGNORE_ENTITIES
 from src.base.generator import Generator
 
 class GroundingsGenerator(Generator):
@@ -91,6 +91,7 @@ class GroundingsGenerator(Generator):
                         groundings = grounding_str)
                 else:
                     eval_prompt_texts[ci] = ""
+                    gjson_arr_bests[ci] = batch_gjson_arr[ci]
 
             print('no of valid eval prompts: ', len([p for p in eval_prompt_texts if p != ""]))
             esummaries, _ = self.get_output_from_llm(list(eval_prompt_texts.values()), evaluation_system_prompt, evaluation_json_schema)
@@ -114,7 +115,7 @@ class GroundingsGenerator(Generator):
                     gbest_stats[ci] = None
                     TSMAX[ci] = 0
                     all_trial_status[bsi] = 1
-                    grounding_version[ci][0]['groundings_score'] = 0
+                    grounding_versions[ci][0]['groundings_score'] = 0
             
 
             while nt < NO_OF_TRIALS:
@@ -237,6 +238,7 @@ class GroundingsGenerator(Generator):
         sampled_entities_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/{self.filecode}/{self.filename}_sampled_entities.json'
         bucket_entities_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/all_doc_entity_stats.json'
         bucket_entities_info_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/all_doc_entity_grounding_stats.json'
+        sampled_bucket_entities_fp = f'data/chunked_data/global_chunk_store/{self.model_folder}/multi_doc_sampled_entities.json'
         chunks_obj_fp = f'data/chunked_data/chunks/{self.filename}_chunked.json'
 
         if os.path.exists(chunk_store_fp) and os.path.exists(chunks_obj_fp) and ((use_bucket_entities and os.path.exists(bucket_entities_fp)) or (not(skip_entity_sampling) and os.path.exists(entity_store_fp)) or (skip_entity_sampling and os.path.exists(sampled_entities_fp))):
@@ -255,9 +257,12 @@ class GroundingsGenerator(Generator):
             if use_bucket_entities:
                 with open(bucket_entities_fp, 'r') as fp:
                     entity_store = json.load(fp)[f"{bucket_size}"]
+                with open(sampled_bucket_entities_fp, 'r') as fp:
+                    bucket_entity_store = json.load(fp)[f"{bucket_size}"]
                 with open(entity_store_fp, 'r') as fp:
                     doc_entity_store = json.load(fp)
-                sampled_entity_keys = list(entity_store.keys())
+                #sampled_entity_keys = list(entity_store.keys())
+                sampled_entity_keys = bucket_entity_store
                 sampled_entity_keys = [ek for ek in sampled_entity_keys if ek in doc_entity_store.keys()]
             elif skip_entity_sampling:
                 with open(sampled_entities_fp, 'r') as fp:
@@ -352,7 +357,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_index', type=int, default = 6, required = False)
-    parser.add_argument('--filecode', type = str, default = '10-K_NVDA_20240128', required = False)
+    parser.add_argument('--filecode', type = str, default = 'NVDA', required = False)
     parser.add_argument('--skip_entity_sampling', type = bool, default = False, required = True)
     parser.add_argument('--use_bucket_entities', type = bool, default = False, required = True)
     parser.add_argument('--prompt_batch_size', type = int, default = 1, required = False) # prompt batch size to be set as 1 for this always

@@ -75,7 +75,7 @@ def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, te
     delta_responses = []
     print('length of prompts: ', len(prompts))
 
-    async def process_messages(prompts, max_retries = 3):
+    async def process_messages(prompts, max_retries = 5):
         results = [{"response": "", "prompt_tokens": 0, "output_tokens": 0}] * len(prompts)
 
         for pi, prompt in enumerate(prompts):
@@ -91,7 +91,7 @@ def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, te
                             {"role": "user", "content": prompt}
                         ]
                         completion = await llm_model.chat.completions.create(
-                            model="llama-3.3-70b-versatile",
+                            model="openai/gpt-oss-120b",
                             messages=messages,
                             temperature=temperature,
                             top_p = 0.9,
@@ -108,13 +108,13 @@ def execute_groq_task_api(llm_model, response_format, prompts, system_prompt, te
                         attempt += 1
                         print(f"[Attempt {attempt}] Error during request: {e}")
                         if attempt < max_retries:
-                            await asyncio.sleep(1.5)
+                            await asyncio.sleep(3)
                         else:
                             print(f"Failed after {max_retries} attempts. Exiting.")
-                            SystemExit()
+                            #SystemExit()
 
                 if not success:
-                    SystemExit("Groq api responded with errors!")
+                    print("Groq api responded with errors!")
             else:
                 results[pi] = { 'response': "", 'prompt_tokens': 0, 'output_tokens': 0 }
         

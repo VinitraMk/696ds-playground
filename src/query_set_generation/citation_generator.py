@@ -16,7 +16,7 @@ from src.base.generator import Generator
 class CitationGenerator(Generator):
 
     def __init__(self, model_index = 6, prompt_batch_size = 3, query_hop_span: str = 'multi_hop'):
-        super().__init__()
+        super().__init__(model_index = model_index, prompt_batch_size = prompt_batch_size)
         self.query_hop_span = query_hop_span
         
 
@@ -71,7 +71,8 @@ class CitationGenerator(Generator):
             citations_status_info = self.get_script_status()
             total_q_bfr = 0
             total_q_after = 0
-            for ei in range(no_of_entities):
+            noe = min(no_of_entities, len(sampled_entities))
+            for ei in range(noe):
                 entity = sampled_entities[ei]
 
                 if entity in citations_status_info and citations_status_info[entity] == "completed":

@@ -1,0 +1,11 @@
+model_index: 11
+prompt_batch_size: 5
+query_hop_span: 'multi_doc'
+query_type: 'all'
+filecode: 'ALL_IN_POOL'
+no_of_qstns: 1
+no_of_entities: 200
+step: 'query_classification'
+bucket_size: 3
+use_bucket_entities: True
+skip_entity_sampling: False

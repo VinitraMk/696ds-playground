@@ -102,8 +102,9 @@ class AnswerGenerator(Generator):
             #random_indices = random.sample(range(0, len(all_factoids)), MAX_FACTOIDS_TO_SAMPLE)
             print('\nStarting answer generation for batch of questions\n')
             sampled_entities = list(query_arr.keys())
+            noe = min(no_of_entities, len(sampled_entities))
             #sampled_entities = ["Ai", "Intangible Assets", "Data Center"]
-            for ei in range(no_of_entities):
+            for ei in range(noe):
                 entity = sampled_entities[ei]
                 filtered_queries = query_arr[entity]
                 print(f'total no of queries for entity {entity}: ', len(filtered_queries))
@@ -127,7 +128,7 @@ class AnswerGenerator(Generator):
                         if qobj != None and 'answer' in qobj:
                             batch_queries[qbi]['answer'] = qobj['answer']
                     filtered_queries[qi:qi+self.prompt_batch_size] = batch_queries
-                query_arr[entity] = [query_obj for query_obj in filtered_queries if 'answer' in query_obj and query_obj['answer']]
+                query_arr[entity] = [query_obj for query_obj in filtered_queries if 'answer' in query_obj and query_obj['answer'] != ""]
 
                 # NOT IMPLEMENTED
                 if refine_answers:
